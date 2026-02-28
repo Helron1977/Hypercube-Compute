@@ -1,6 +1,6 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/Helron1977/triade-engine/main/docs/assets/logo.png" alt="Triade Engine Logo" width="200" style="border-radius:20px;"/>
-  <h1>🌊 Triade Engine V2 🚀</h1>
+  <h1>🌊 Triade Engine V3 🚀</h1>
   <p><strong>A GodMode O(1) Tensor-based Compute Engine for Web & Node.js</strong></p>
   
   [![npm version](https://img.shields.io/npm/v/hypercube-compute.svg?style=flat-square)](https://www.npmjs.com/package/hypercube-compute)
@@ -19,7 +19,7 @@ By structuring state as mathematical tensors ("faces" of a cube) rather than dis
 - Computations are naturally **vectorized**.
 - Performance is consistently **O(1)**. 
 - Memory allocations during the computing loops are exactly **0**.
-- Multi-threading (via Web Workers) and WebGL/WebGPU acceleration become trivial because all data is already in a raw binary buffer format.
+- Multi-threading (via Web Workers & `SharedArrayBuffer`) and **WebGPU hardware acceleration** become trivial because all data is already in a raw binary buffer format.
 
 If you are trying to implement **Cellular Automata, Fluid Dynamics (LBM), Heat Diffusion, or massive procedurally generated ecosystems** in JavaScript without resorting to C++ WebAssembly, Triade provides the high-performance memory layout you need.
 
@@ -34,6 +34,12 @@ A fully continuous computational fluid dynamics solver. It forces "wind" through
 
 ### 🌊 Ocean Simulator
 An open-world toric-bounded oceanic current simulator powered by the D2Q9 LBM Engine, coupled with a procedural Heatmap generator. It computes fluid velocity and allows simple `Boat` entities to be routed across the continuous fluid grid.
+
+### 🗺️ Flow-Field Engine (V3)
+A massive crowd pathfinding engine generating an O(1) integration and vector field. Utilizing a multi-pass WebGPU Compute Shader (or CPU wavefront fallback), it can guide 10,000+ agents to a target simultaneously without per-entity path calculation overhead.
+
+### ☁️ Simplified Fluid Dynamics (V3)
+A lightweight Eulerian fluid simulator using pure Advection and Bilinear Sampling. Designed to simulate smoke, gases, and empirical thermal buoyancy directly via WebGPU float32 arrays.
 
 ---
 
@@ -114,6 +120,9 @@ When computing, the `ITriadeEngine` naturally reads these independent mathematic
 
 ### `ITriadeEngine`
 The protocol for physical algorithms. Receives the `faces` (memory pointers) and executes the logic. Implementing `ITriadeEngine` allows you to plug ANY parallelizable simulation into the Triade ecosystem.
+
+### `TriadeCompositor` (The 7th Plane)
+New in V3, the compositor acts as a declarative abstraction layer mapping the pure mathematical faces to an on-screen visual using custom WebGPU Fragment Shaders or a CPU canvas fallback. This allows extremely fast rendering without blocking the main UI thread.
 
 ---
 
