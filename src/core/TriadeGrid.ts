@@ -1,6 +1,7 @@
 import { TriadeMasterBuffer } from './TriadeMasterBuffer';
 import { TriadeCubeV2 } from './TriadeCubeV2';
 import type { ITriadeEngine } from '../engines/ITriadeEngine';
+import { TriadeWorkerPool } from './cpu/TriadeWorkerPool';
 
 /**
  * TriadeGrid gère un assemblage N x M de TriadeCubes adjacents.
@@ -14,10 +15,10 @@ export class TriadeGrid {
     public readonly cubeSize: number;
     public isPeriodic: boolean;
     public readonly mode: 'cpu' | 'webgpu';
+    public masterBuffer: TriadeMasterBuffer;
 
     private _engineFactory: () => ITriadeEngine;
-
-    // TODO(WebGPU V3): Pipeline layout and buffers references
+    private workerPool: TriadeWorkerPool | null = null;
 
     constructor(
         cols: number,
@@ -32,6 +33,7 @@ export class TriadeGrid {
         this.cols = cols;
         this.rows = rows;
         this.cubeSize = cubeSize;
+        this.masterBuffer = masterBuffer;
         this.isPeriodic = isPeriodic;
         this.mode = mode;
         this._engineFactory = engineFactory;
@@ -59,7 +61,8 @@ export class TriadeGrid {
         engineFactory: () => ITriadeEngine,
         numFaces: number = 6,
         isPeriodic: boolean = true,
-        mode: 'cpu' | 'webgpu' = 'cpu'
+        mode: 'cpu' | 'webgpu' = 'cpu',
+        useWorkers: boolean = true
     ): Promise<TriadeGrid> {
         if (mode === 'webgpu') {
             // Check runtime WebGPU definition in case the user forgets to import Context
@@ -82,6 +85,18 @@ export class TriadeGrid {
                     grid.cubes[y][x]?.initGPU();
                 }
             }
+        } else if (mode === 'cpu' && useWorkers && typeof SharedArrayBuffer !== 'undefined' && masterBuffer.buffer instanceof SharedArrayBuffer) {
+            // Activer l'accélération multicore logicielle
+            grid.workerPool = new TriadeWorkerPool();
+            try {
+                // Tenter de charger le worker via Vite/Tsup si la compilation exporte le Worker externe
+                // Note : il faudra configurer Tsup pour compiler cpu.worker.ts séparément
+                await grid.workerPool.init();
+                console.info(`[TriadeGrid] WorkerPool CPU instanciée avec succès (Zero-Copy prêt).`);
+            } catch (error) {
+                console.warn("[TriadeGrid] Échec de l'initialisation de la WorkerPool.", error);
+                grid.workerPool = null;
+            }
         }
 
         return grid;
@@ -89,7 +104,7 @@ export class TriadeGrid {
 
     /**
      * Calcule une étape complète de la grille.
-     * 1. Exécute "compute()" sur chaque cube (CPU) ou déclenche le Compute Shader (GPU)
+     * 1. Exécute "compute()" sur chaque cube (CPU ou WorkerPool) ou déclenche le Compute Shader (GPU)
      * 2. Synchronise les bords (Boundary Exchange) sur les faces demandées
      */
     async compute(facesToSynchronize: number | number[] = 0) {
@@ -109,13 +124,29 @@ export class TriadeGrid {
             }
 
             TriadeGPUContext.device.queue.submit([commandEncoder.finish()]);
+            // On pourras remonter les faces en RAM ici avec un async map si l'engine doit afficher
             return;
         }
 
-        // 1. Calcul (Intra-Cube) - Mode CPU
-        for (let y = 0; y < this.rows; y++) {
-            for (let x = 0; x < this.cols; x++) {
-                this.cubes[y][x]?.compute();
+        // 1. Calcul (Intra-Cube) - Mode CPU Multithread (Workers + SharedMemory)
+        if (this.workerPool && this.masterBuffer.buffer instanceof SharedArrayBuffer) {
+            const flatCubes = this.cubes.flat().filter(c => c !== null) as TriadeCubeV2[];
+
+            // Note: On assume que l'engine du premier cube est représentatif
+            const engineName = flatCubes[0]?.engine?.name || 'Unknown';
+            const engineConfig = {
+                radius: (flatCubes[0]?.engine as any)?.radius || 10,
+                weight: (flatCubes[0]?.engine as any)?.weight || 1.0
+            };
+
+            await this.workerPool.computeAll(flatCubes, this.masterBuffer.buffer, { name: engineName, config: engineConfig });
+        }
+        // 1bis. Calcul (Intra-Cube) - Mode CPU Séquentiel (Main Thread)
+        else {
+            for (let y = 0; y < this.rows; y++) {
+                for (let x = 0; x < this.cols; x++) {
+                    this.cubes[y][x]?.compute();
+                }
             }
         }
 

@@ -1,13 +1,19 @@
 export class TriadeMasterBuffer {
-    public readonly buffer: ArrayBuffer;
+    public readonly buffer: ArrayBuffer | SharedArrayBuffer;
     private offset: number = 0;
 
     /**
-     * Alloue un unique bloc de mémoire vive (ArrayBuffer) pour l'ensemble du système.
+     * Alloue un unique bloc de mémoire vive pour l'ensemble du système.
+     * Utilise un SharedArrayBuffer si disponible pour le support CPU multithread (Zero-Copy).
      * @param totalBytes Taille totale de la RAM allouée (par défaut 100 MB).
      */
     constructor(totalBytes: number = 100 * 1024 * 1024) {
-        this.buffer = new ArrayBuffer(totalBytes);
+        if (typeof SharedArrayBuffer !== 'undefined') {
+            this.buffer = new SharedArrayBuffer(totalBytes);
+        } else {
+            console.warn("[TriadeMasterBuffer] SharedArrayBuffer n'est pas supporté (vérifiez vos headers COOP/COEP). Fallback sur ArrayBuffer (pas de multi-threading CPU possible).");
+            this.buffer = new ArrayBuffer(totalBytes);
+        }
     }
 
     /**
