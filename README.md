@@ -99,8 +99,8 @@ graph TD
 The soul of the engine. Acts as a memory allocator. Ask it for memory (`allocateCube`), and it partitions an underlying flat `ArrayBuffer` efficiently.
 
 ### `TriadeCubeV2`
-A compute unit. It represents a spatial block of logic. True to its name, it was designed with spatial structural integrity in mind:
-- **Up to 6 Faces**: A cube has theoretical physical/logical sides.
+A compute unit. It represents a spatial block of logic. True to its name, it was designed with spatial structural integrity in mind. Although initialized with 6 faces by default (like a physical cube), it can hold an arbitrary number of mathematical dimensions:
+- **N Faces (Tensor Layers)**: A cube represents physical/logical sides. In the LBM simulation, a single cube holds 22 distinct faces!
 - **Inter-Cube Connectivity**: Cubes can be linked together! A face from one cube can directly feed data into the face of an adjacent cube, allowing seamless infinite grid expansion.
 - **Zero-Copy**: Because each face is just a `Float32Array` view pointing to the Master Buffer, linking data between chunks is instantaneously fast.
 
