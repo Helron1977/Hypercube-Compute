@@ -11,6 +11,7 @@ export * from './engines/AerodynamicsEngine';
 export * from './engines/EcosystemEngineO1';
 export * from './engines/GameOfLifeEngine';
 export * from './engines/HeatmapEngine';
+export * from './engines/FlowFieldEngine'; // Ajout Pathfinding V3
 
 // IO / Adapters
 export * from './io/CanvasAdapter';

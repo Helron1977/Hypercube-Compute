@@ -3,6 +3,7 @@ import { TriadeCubeV2 } from '../TriadeCubeV2';
 import type { ITriadeEngine } from '../../engines/ITriadeEngine';
 // Import statique des moteurs connus (A améliorer via un Registry dynamique plus tard)
 import { HeatmapEngine } from '../../engines/HeatmapEngine';
+import { FlowFieldEngine } from '../../engines/FlowFieldEngine';
 
 /**
  * Script de base exécuté par les instances Web Worker de la TriadeWorkerPool.
@@ -38,6 +39,8 @@ self.onmessage = (e: MessageEvent) => {
         let engine: ITriadeEngine | null = null;
         if (engineName === 'Heatmap (O1 Spatial Convolution)') {
             engine = new HeatmapEngine(engineConfig?.radius, engineConfig?.weight);
+        } else if (engineName === 'Flow-Field Pathfinding V3') {
+            engine = new FlowFieldEngine();
         } else {
             // Fallback temporaire pour les autres moteurs non gérés dynamiquement ici
             console.error(`[Worker] Moteur non reconnu ou non supporté par les Web Workers: ${engineName}`);
