@@ -14,18 +14,20 @@ Le passage à une accélération matérielle pose la question de la "réinventio
 
 ---
 
-## 2. Optimisations du Core
+## 2. Optimisations du Core : Approche Hybride
 
-### A. Passage au WebGPU (Calcul Spatial)
+Afin de garantir une flexibilité maximale, **le moteur laissera au développeur le choix explicite** entre l'accélération matérielle (WebGL/WebGPU) et le traitement logiciel pur (CPU).
+
+### A. Passage au WebGPU / WebGL (Calcul Spatial)
 
 Le calcul de la Face 5 (SAT) est le candidat idéal pour WebGPU.
 
 *   **Prefix Sum Parallèle :** Implémenter l'intégration SAT via des Compute Shaders réduirait le temps de calcul de $O(N)$ à $O(\log N)$ sur le plan matériel.
 *   **Zero-Copy :** WebGPU permet de lire les résultats des calculs directement pour le rendu sans faire d'allers-retours coûteux entre la RAM et la VRAM.
 
-### B. Memory Pooling & Workers (Optimisation CPU)
+### B. Memory Pooling & Workers (Fallback CPU Optatif)
 
-Si vous restez sur CPU :
+Pour les environnements ne supportant pas l'accélération matérielle, ou par choix explicite du développeur, le calcul CPU sera optimisé :
 
 *   **SharedArrayBuffer :** Utiliser des Workers pour calculer les faces en parallèle sans duplication de mémoire.
 *   **SIMD :** Utiliser les instructions vectorielles de WebAssembly pour accélérer les additions de l'intégration SAT.
