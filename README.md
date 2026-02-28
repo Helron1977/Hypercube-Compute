@@ -121,7 +121,7 @@ The protocol for physical algorithms. Receives the `faces` (memory pointers) and
 
 We created a custom HTML demo to show the engine handling pure math simulation and fluid dynamics at 60 FPS in pure JavaScript without WebGL:
 
-👉 **[View Interactive LBM Demo on GitHub Pages](https://helron1977.github.io/triade-engine/)**
+👉 **[View Interactive LBM Demo on GitHub Pages](https://helron1977.github.io/Hypercube-Compute/)**
 
 ### Performance Benchmark (JS Objects vs Triade Tensors)
 *Simulating a 256x256 Grid (65,536 cells) of fluid.*
