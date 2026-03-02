@@ -110,9 +110,9 @@ export class HypercubeGrid {
     /**
      * Calcule une étape complète de la grille.
      * 1. Exécute "compute()" sur chaque cube (CPU ou WorkerPool) ou déclenche le Compute Shader (GPU)
-     * 2. Synchronise les bords (Boundary Exchange) sur les faces demandées
+     * 2. Synchronise les bords (Boundary Exchange) sur les faces demandées ou déduites par le moteur.
      */
-    async compute(facesToSynchronize: number | number[] = 0) {
+    async compute(facesToSynchronize?: number | number[]) {
         if (this.mode === 'webgpu') {
             const HypercubeGPUContext = (await import('./gpu/HypercubeGPUContext')).HypercubeGPUContext;
             const commandEncoder = HypercubeGPUContext.device.createCommandEncoder();
@@ -159,7 +159,15 @@ export class HypercubeGrid {
         // S'il n'y a qu'un seul cube, la synchronisation est inutile (et risquerait d'écraser des données sur lui-même)
         if (this.cols === 1 && this.rows === 1) return;
 
-        const faces = Array.isArray(facesToSynchronize) ? facesToSynchronize : [facesToSynchronize];
+        let faces: number[];
+        if (facesToSynchronize !== undefined) {
+            faces = Array.isArray(facesToSynchronize) ? facesToSynchronize : [facesToSynchronize];
+        } else {
+            // Déduction automatique depuis le moteur du premier cube de la grille
+            const engine = this.cubes[0][0]?.engine;
+            faces = (engine && engine.getSyncFaces) ? engine.getSyncFaces() : [0];
+        }
+
         for (const f of faces) {
             this.synchronizeBoundaries(f);
         }

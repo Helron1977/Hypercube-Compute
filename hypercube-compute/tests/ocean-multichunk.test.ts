@@ -56,8 +56,8 @@ describe('OceanEngine Multi-Chunk (Grid 2x2 Boundary Exchange)', () => {
         }
 
         // SIMULATE
-        for (let i = 0; i < 50; i++) {
-            await grid.compute([0, 1, 2, 3, 4, 5, 6, 7, 8]); // MUST Sync ALL 9 LBM Populations
+        for (let i = 0; i < 1000; i++) {
+            await grid.compute(); // HypercubeGrid interrogera automatiquement getSyncFaces() sur l'OceanEngine !
         }
 
         // CALCULATE FINAL MASS

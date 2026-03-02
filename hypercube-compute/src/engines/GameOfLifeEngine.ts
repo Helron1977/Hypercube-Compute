@@ -9,6 +9,10 @@ export class GameOfLifeEngine implements IHypercubeEngine {
         return 6; // Standard
     }
 
+    public getSyncFaces(): number[] {
+        return [1]; // L'état actuel t (Face 1) doit être partagé aux voisins
+    }
+
     public compute(faces: Float32Array[], mapSize: number): void {
         const current = faces[1]; // Face 1: État actuel (t)
         const next = faces[2];    // Face 2: État futur (t+1)

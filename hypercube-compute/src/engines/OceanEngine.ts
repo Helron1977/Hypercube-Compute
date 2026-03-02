@@ -36,6 +36,10 @@ export class OceanEngine implements IHypercubeEngine {
         return 23; // 0-8: f, 9-17: f_post, 18: ux, 19: uy, 20: rho, 21: bio, 22: obst
     }
 
+    public getSyncFaces(): number[] {
+        return [0, 1, 2, 3, 4, 5, 6, 7, 8]; // LBM a besoin de streamer ses 9 populations aux frontières !
+    }
+
     // Re-use lab-perfect constants
     private readonly w = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
     private readonly cx = [0, 1, 0, -1, 0, 1, -1, -1, 1];

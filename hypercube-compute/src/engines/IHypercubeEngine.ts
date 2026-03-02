@@ -34,6 +34,13 @@ export interface IHypercubeEngine {
     getRequiredFaces(): number;
 
     /**
+     * @description Retourne la liste des indices de faces (0 à N) qui doivent être 
+     * synchronisées aux frontières des chunks (Boundary Exchange) après chaque compute.
+     * Si non défini, la grille synchronisera la Face 0 par défaut.
+     */
+    getSyncFaces?(): number[];
+
+    /**
      * Code source WGSL (Compute Shader) optionnel pour l'exécution sur GPU.
      * Si fourni, HypercubeGrid l'utilisera en mode WebGPU (Accélération Matérielle).
      * @AI_RULE Le shader doit utiliser des Storage Buffers pour lire/écrire les faces.
