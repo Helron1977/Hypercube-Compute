@@ -43,6 +43,17 @@ An open-world toric-bounded oceanic current simulator powered by the D2Q9 LBM En
 ### 🗺️ Flow-Field Engine (V3)
 A massive crowd pathfinding engine generating an O(1) integration and vector field. Utilizing a multi-pass WebGPU Compute Shader (or CPU wavefront fallback), it can guide 10,000+ agents to a target simultaneously without per-entity path calculation overhead.
 
+### 🧬 GameOfLife Ecosystem (O1 Tile)
+Un automate cellulaire repensé en **écosystème organique cyclique (Rock-Paper-Scissors)**.
+Les états (Plantes, Herbivores, Carnivores) naissent, survivent ou meurent selon des probabilités stochastiques et des voisinages pondérés (Von Neumann fort, Moore faible).
+
+**Visuel Soft** : En plus de stocker l'état (Face 1), l'écosystème génère continuellement une **carte de densité/âge (Face 3)** allant de `0.0` à `1.0`. Cette matrice peut être envoyée directement au `HeatmapEngine` pour un rendu organique flou et continu, sans l'effet "gros pixels" rigides habituels des Game of Life primitifs.
+
+**Faces clés**
+- **Face 1** : L'état discret de l'espèce (0=Vide, 1=Plante, 2=Herbi, 3=Carni).
+- **Face 2** : Écriture (Swap internal memory).
+- **Face 3** : L'âge ou la densité de masse (0.0 → 1.0) idéale pour les gradients.
+
 ### 🔥 Heatmap Engine – Spatial Diffusion O(1) via Summed Area Table (V3)
 Generates a heatmap or influence map from a binary/context map in O(N) total time (independent of the radius size).
 
