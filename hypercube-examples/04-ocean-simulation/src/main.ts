@@ -24,7 +24,7 @@ async function init() {
             6, true, 'cpu', true
         );
 
-        const ctx = canvas.getContext('2d')!;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
         const imageData = ctx.createImageData(TOTAL_SIZE, TOTAL_SIZE);
         const data = imageData.data;
 

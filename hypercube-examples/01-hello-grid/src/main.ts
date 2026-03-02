@@ -27,10 +27,10 @@ async function init() {
         // 3. Initialisation aléatoire de la première face
         const masterFace = grid.cubes[0][0]!.faces[0];
         for (let i = 0; i < masterFace.length; i++) {
-            masterFace[i] = Math.random() > 0.8 ? 1 : 0;
+            masterFace[i] = Math.floor(Math.random() * 4);
         }
 
-        const ctx = canvas.getContext('2d')!;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
         let lastTime = performance.now();
         let frameCount = 0;
 
