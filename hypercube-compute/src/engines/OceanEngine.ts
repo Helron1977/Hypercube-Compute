@@ -78,6 +78,26 @@ export class OceanEngine implements IHypercubeEngine {
 
     constructor() { }
 
+    public addGlobalCurrent(faces: Float32Array[], targetUx: number, targetUy: number): void {
+        const nx = 256; // Fallback size, ideally should get nx/ny
+        const ny = 256;
+        const ux = faces[19];
+        const uy = faces[20];
+        for (let i = 0; i < nx * ny; i++) {
+            ux[i] += targetUx;
+            uy[i] += targetUy;
+        }
+    }
+
+    public addVortex(faces: Float32Array[], mx: number, my: number, strength: number = 10.0): void {
+        this.interaction.mouseX = mx;
+        this.interaction.mouseY = my;
+        this.interaction.active = true;
+
+        // Disable after a frame to simulate impulse
+        setTimeout(() => { this.interaction.active = false; }, 50);
+    }
+
     /**
      * Entry point: Orchestrates LBM and Bio steps
      */

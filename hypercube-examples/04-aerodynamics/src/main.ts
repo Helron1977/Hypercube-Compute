@@ -27,11 +27,17 @@ async function init() {
     const loop = async () => {
         await grid.compute();
 
-        // WOW: Heat colormap for Velocity Magnitude (extracted from Face 18/19 internally by engine or via Viz)
-        // Let's use Face 21 (Curl) for the wind tunnel aesthetic
-        HypercubeViz.quickRender(canvas, chunk, 21, 'viridis');
+        // Render SMOKE (Face 22) with viridis or plasma for a WOW effect
+        HypercubeViz.quickRender(canvas, chunk, 22, 'plasma');
 
         requestAnimationFrame(loop);
+    };
+
+    // Interaction: Inject additional smoke!
+    canvas.onmousemove = (e) => {
+        const x = (e.offsetX / canvas.clientWidth) * SIZE;
+        const y = (e.offsetY / canvas.clientHeight) * SIZE;
+        engine.addVortex(faces, x, y, 1.0); // addVortex now injects smoke
     };
 
     loop();

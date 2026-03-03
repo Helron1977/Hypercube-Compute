@@ -748,7 +748,9 @@ var AerodynamicsEngine = class {
   dragScore = 0;
   initialized = false;
   isLeftBoundary = true;
-  // Par défaut, injecte du vent à gauche
+  interaction = { mouseX: 0, mouseY: 0, active: false };
+  lastNx = 256;
+  lastNy = 256;
   // WebGPU Attributes
   pipelineLBM = null;
   pipelineVorticity = null;
@@ -758,10 +760,10 @@ var AerodynamicsEngine = class {
     return "Lattice Boltzmann D2Q9 (O(1))";
   }
   getRequiredFaces() {
-    return 22;
+    return 23;
   }
   getSyncFaces() {
-    return [0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20];
+    return [0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 22];
   }
   /**
    * Initialisation WebGPU : Prépare les pipelines et les bindings.
@@ -822,6 +824,32 @@ var AerodynamicsEngine = class {
   /**
    * Dispatch GPU via deux passes distinctes.
    */
+  addGlobalCurrent(faces, targetUx, targetUy) {
+    const ux = faces[19];
+    const uy = faces[20];
+    for (let i = 0; i < ux.length; i++) {
+      ux[i] += targetUx;
+      uy[i] += targetUy;
+    }
+  }
+  addVortex(faces, mx, my, strength = 10) {
+    this.interaction.mouseX = mx;
+    this.interaction.mouseY = my;
+    this.interaction.active = true;
+    const nx = this.lastNx;
+    const ny = this.lastNy;
+    const smoke = faces[22];
+    const r = 10;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const ix = Math.floor(mx + dx), iy = Math.floor(my + dy);
+        if (ix >= 0 && ix < nx && iy >= 0 && iy < ny) {
+          const d2 = dx * dx + dy * dy;
+          if (d2 < r * r) smoke[iy * nx + ix] = 1;
+        }
+      }
+    }
+  }
   computeGPU(device, commandEncoder, nx, ny, nz) {
     if (!this.bindGroup || !this.pipelineLBM || !this.pipelineVorticity) return;
     const wgSize = 16;
@@ -839,10 +867,13 @@ var AerodynamicsEngine = class {
     pass2.end();
   }
   compute(faces, nx, ny, nz) {
+    this.lastNx = nx;
+    this.lastNy = ny;
     const obstacles = faces[18];
     const ux_out = faces[19];
     const uy_out = faces[20];
     const curl_out = faces[21];
+    const smoke = faces[22];
     const cx = [0, 1, 0, -1, 0, 1, -1, -1, 1];
     const cy = [0, 0, 1, 0, -1, 1, 1, -1, -1];
     const w = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
@@ -883,8 +914,8 @@ var AerodynamicsEngine = class {
             uy += cy[i] * f_val;
           }
           if (x === 1 && this.isLeftBoundary) {
-            ux = u0;
-            uy = 0;
+            ux = u0 + (Math.random() - 0.5) * 1e-3;
+            uy = (Math.random() - 0.5) * 1e-3;
             rho = 1;
           }
           if (rho > 0) {
@@ -935,6 +966,26 @@ var AerodynamicsEngine = class {
           const dUy_dx = (uy_out[zOff + y * nx + xP] - uy_out[zOff + y * nx + xM]) / dxDist;
           const dUx_dy = (ux_out[zOff + loc_yP * nx + x] - ux_out[zOff + loc_yM * nx + x]) / loc_dyDist;
           curl_out[zOff + y * nx + x] = dUy_dx - dUx_dy;
+        }
+      }
+      for (let y = 1; y < ny - 1; y++) {
+        for (let x = 1; x < nx - 1; x++) {
+          const idx = zOff + y * nx + x;
+          if (obstacles[idx] > 0) {
+            smoke[idx] = 0;
+            continue;
+          }
+          const vx = ux_out[idx];
+          const vy = uy_out[idx];
+          const sx = x - vx;
+          const sy = y - vy;
+          const ix = Math.floor(sx), iy = Math.floor(sy);
+          if (ix >= 1 && ix < nx - 1 && iy >= 1 && iy < ny - 1) {
+            smoke[idx] = smoke[iy * nx + ix] * 0.995;
+          }
+          if (x === 1 && y > ny / 4 && y < 3 * ny / 4) {
+            smoke[idx] = 1;
+          }
         }
       }
       this.initialized = true;
@@ -1303,6 +1354,7 @@ var WorkerMasterBufferDummy = class {
     this._stride = stride;
   }
 };
+var chunkCache = /* @__PURE__ */ new Map();
 self.onmessage = (e) => {
   const data = e.data;
   if (data.type === "COMPUTE") {
@@ -1312,38 +1364,51 @@ self.onmessage = (e) => {
       postMessage({ type: "DONE", success: false });
       return;
     }
-    let engine = null;
-    if (engineName === "Heatmap (O1 Spatial Convolution)") {
-      engine = new HeatmapEngine(engineConfig?.radius, engineConfig?.weight);
-    } else if (engineName === "FlowFieldEngine-V12") {
-      engine = new FlowFieldEngine();
-      if (engineConfig && "targetX" in engineConfig) {
-        engine.targetX = engineConfig.targetX;
-        engine.targetY = engineConfig.targetY;
+    let cube = chunkCache.get(cubeOffset);
+    if (!cube) {
+      let engine = null;
+      if (engineName === "Heatmap (O1 Spatial Convolution)") {
+        engine = new HeatmapEngine(engineConfig?.radius, engineConfig?.weight);
+      } else if (engineName === "FlowFieldEngine-V12") {
+        engine = new FlowFieldEngine();
+        if (engineConfig && "targetX" in engineConfig) {
+          engine.targetX = engineConfig.targetX;
+          engine.targetY = engineConfig.targetY;
+        }
+      } else if (engineName === "Simplified Fluid Dynamics") {
+        engine = new FluidEngine(engineConfig?.dt, engineConfig?.buoyancy, engineConfig?.dissipation);
+      } else if (engineName === "Lattice Boltzmann D2Q9 (O(1))") {
+        engine = new AerodynamicsEngine();
+      } else if (engineName === "OceanEngine") {
+        engine = new OceanEngine();
+        if (engineConfig && Object.keys(engineConfig).length > 0) {
+          engine.params = engineConfig;
+        }
+      } else {
+        console.error(`[Worker] Moteur non reconnu ou non support\xE9 par les Web Workers: ${engineName}`);
+        postMessage({ type: "DONE", success: false });
+        return;
       }
-    } else if (engineName === "Simplified Fluid Dynamics") {
-      engine = new FluidEngine(engineConfig?.dt, engineConfig?.buoyancy, engineConfig?.dissipation);
-    } else if (engineName === "Lattice Boltzmann D2Q9 (O(1))") {
-      engine = new AerodynamicsEngine();
-    } else if (engineName === "OceanEngine") {
-      engine = new OceanEngine();
-      if (engineConfig && Object.keys(engineConfig).length > 0) {
-        engine.params = engineConfig;
+      if (!engine) {
+        console.error(`[Worker CPU] Erreur fatale: engine est null.`);
+        postMessage({ type: "DONE", success: false });
+        return;
       }
+      const dummyBuffer = new WorkerMasterBufferDummy(sharedBuffer);
+      dummyBuffer.setMockLocation(cubeOffset, stride);
+      cube = new HypercubeChunk(chunkX || 0, chunkY || 0, nx, ny, nz || 1, dummyBuffer, numFaces || 6);
+      cube.setEngine(engine);
+      chunkCache.set(cubeOffset, cube);
     } else {
-      console.error(`[Worker] Moteur non reconnu ou non support\xE9 par les Web Workers: ${engineName}`);
-      postMessage({ type: "DONE", success: false });
-      return;
+      if (cube.engine && engineConfig) {
+        if (engineName === "FlowFieldEngine-V12" && "targetX" in engineConfig) {
+          cube.engine.targetX = engineConfig.targetX;
+          cube.engine.targetY = engineConfig.targetY;
+        } else if (engineName === "OceanEngine" && Object.keys(engineConfig).length > 0) {
+          cube.engine.params = { ...cube.engine.params, ...engineConfig };
+        }
+      }
     }
-    if (!engine) {
-      console.error(`[Worker CPU] Erreur fatale: engine est null.`);
-      postMessage({ type: "DONE", success: false });
-      return;
-    }
-    const dummyBuffer = new WorkerMasterBufferDummy(sharedBuffer);
-    dummyBuffer.setMockLocation(cubeOffset, stride);
-    const cube = new HypercubeChunk(chunkX || 0, chunkY || 0, nx, ny, nz || 1, dummyBuffer, numFaces || 6);
-    cube.setEngine(engine);
     try {
       Promise.resolve(cube.compute()).then(() => {
         postMessage({ type: "DONE", success: true });

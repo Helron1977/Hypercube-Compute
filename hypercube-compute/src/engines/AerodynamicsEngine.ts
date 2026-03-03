@@ -7,7 +7,10 @@ import type { IHypercubeEngine, FlatTensorView } from "./IHypercubeEngine";
 export class AerodynamicsEngine implements IHypercubeEngine {
     public dragScore: number = 0;
     private initialized: boolean = false;
-    public isLeftBoundary: boolean = true; // Par défaut, injecte du vent à gauche
+    public isLeftBoundary: boolean = true;
+    public interaction = { mouseX: 0, mouseY: 0, active: false };
+    private lastNx: number = 256;
+    private lastNy: number = 256;
 
     // WebGPU Attributes
     private pipelineLBM: GPUComputePipeline | null = null;
@@ -20,11 +23,11 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     }
 
     public getRequiredFaces(): number {
-        return 22; // 9(fi) + 9(f_post) + 1(obstacles) + 3(ux, uy, curl)
+        return 23; // 9(fi) + 9(f_post) + 1(obstacles) + 3(ux, uy, curl) + 1(smoke)
     }
 
     public getSyncFaces(): number[] {
-        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20]; // Sync LBM pops + macro variables (obstacles, ux, uy)
+        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 22]; // Sync LBM pops + macros + smoke
     }
 
     /**
@@ -95,6 +98,36 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     /**
      * Dispatch GPU via deux passes distinctes.
      */
+    public addGlobalCurrent(faces: Float32Array[], targetUx: number, targetUy: number): void {
+        // Simple constant offset on velocity faces
+        const ux = faces[19];
+        const uy = faces[20];
+        for (let i = 0; i < ux.length; i++) {
+            ux[i] += targetUx;
+            uy[i] += targetUy;
+        }
+    }
+
+    public addVortex(faces: Float32Array[], mx: number, my: number, strength: number = 10.0): void {
+        this.interaction.mouseX = mx;
+        this.interaction.mouseY = my;
+        this.interaction.active = true;
+        // Inject smoke and a bit of momentum
+        const nx = this.lastNx;
+        const ny = this.lastNy;
+        const smoke = faces[22];
+        const r = 10;
+        for (let dy = -r; dy <= r; dy++) {
+            for (let dx = -r; dx <= r; dx++) {
+                const ix = Math.floor(mx + dx), iy = Math.floor(my + dy);
+                if (ix >= 0 && ix < nx && iy >= 0 && iy < ny) {
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 < r * r) smoke[iy * nx + ix] = 1.0;
+                }
+            }
+        }
+    }
+
     public computeGPU(device: GPUDevice, commandEncoder: GPUCommandEncoder, nx: number, ny: number, nz: number): void {
         if (!this.bindGroup || !this.pipelineLBM || !this.pipelineVorticity) return;
 
@@ -118,10 +151,13 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     }
 
     public compute(faces: Float32Array[], nx: number, ny: number, nz: number): void {
+        this.lastNx = nx;
+        this.lastNy = ny;
         const obstacles = faces[18];
         const ux_out = faces[19];
         const uy_out = faces[20];
         const curl_out = faces[21];
+        const smoke = faces[22];
 
         const cx = [0, 1, 0, -1, 0, 1, -1, -1, 1];
         const cy = [0, 0, 1, 0, -1, 1, 1, -1, -1];
@@ -170,8 +206,12 @@ export class AerodynamicsEngine implements IHypercubeEngine {
                         uy += cy[i] * f_val;
                     }
 
-                    // Appliquer l'inlet sur la bordure gauche physique (uniquement pour un seul chunk sans multisync, sinon mieux vaut utiliser addGlobalCurrent)
-                    if (x === 1 && this.isLeftBoundary) { ux = u0; uy = 0.0; rho = 1.0; }
+                    // Appliquer l'inlet sur la bordure gauche avec un petit bruit pour casser la symétrie
+                    if (x === 1 && this.isLeftBoundary) {
+                        ux = u0 + (Math.random() - 0.5) * 0.001;
+                        uy = (Math.random() - 0.5) * 0.001;
+                        rho = 1.0;
+                    }
 
                     if (rho > 0) { ux /= rho; uy /= rho; }
                     ux_out[idx] = ux;
@@ -232,6 +272,32 @@ export class AerodynamicsEngine implements IHypercubeEngine {
                     const dUy_dx = (uy_out[zOff + y * nx + xP] - uy_out[zOff + y * nx + xM]) / dxDist;
                     const dUx_dy = (ux_out[zOff + loc_yP * nx + x] - ux_out[zOff + loc_yM * nx + x]) / loc_dyDist;
                     curl_out[zOff + y * nx + x] = dUy_dx - dUx_dy;
+                }
+            }
+
+            // 4. TRACER ADVECTION (Smoke)
+            for (let y = 1; y < ny - 1; y++) {
+                for (let x = 1; x < nx - 1; x++) {
+                    const idx = zOff + y * nx + x;
+                    if (obstacles[idx] > 0) {
+                        smoke[idx] = 0;
+                        continue;
+                    }
+                    // Simple semi-lagrangian advection
+                    const vx = ux_out[idx];
+                    const vy = uy_out[idx];
+                    const sx = x - vx;
+                    const sy = y - vy;
+
+                    const ix = Math.floor(sx), iy = Math.floor(sy);
+                    if (ix >= 1 && ix < nx - 1 && iy >= 1 && iy < ny - 1) {
+                        smoke[idx] = smoke[iy * nx + ix] * 0.995; // dissipation
+                    }
+
+                    // Inject constant smoke at inlet
+                    if (x === 1 && y > ny / 4 && y < 3 * ny / 4) {
+                        smoke[idx] = 1.0;
+                    }
                 }
             }
             this.initialized = true;
