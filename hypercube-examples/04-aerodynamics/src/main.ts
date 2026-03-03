@@ -1,4 +1,4 @@
-import { HypercubeGrid, HypercubeMasterBuffer, OceanEngine, HypercubeViz } from 'hypercube-compute';
+import { HypercubeGrid, HypercubeMasterBuffer, AerodynamicsEngine, HypercubeViz } from 'hypercube-compute';
 
 const SIZE = 256;
 
@@ -7,10 +7,10 @@ async function init() {
     const master = new HypercubeMasterBuffer();
 
     // Aerodynamics Wind Tunnel (LBM engine with obstacles)
-    const grid = await HypercubeGrid.create(1, 1, SIZE, master, () => new OceanEngine(), 23);
+    const grid = await HypercubeGrid.create(1, 1, SIZE, master, () => new AerodynamicsEngine(), 22);
 
     const chunk = grid.cubes[0][0]!;
-    const engine = chunk.engine as OceanEngine;
+    const engine = chunk.engine as AerodynamicsEngine;
     const faces = chunk.faces;
 
     // Create a circular obstacle in the middle
@@ -19,15 +19,12 @@ async function init() {
         for (let x = 0; x < SIZE; x++) {
             const dx = x - cx, dy = y - cy;
             if (dx * dx + dy * dy < r * r) {
-                faces[22][y * SIZE + x] = 1.0; // Face 22 = Obstacles
+                faces[18][y * SIZE + x] = 1.0; // Face 18 = Obstacles in AerodynamicsEngine
             }
         }
     }
 
     const loop = async () => {
-        // Add constant wind from left
-        engine.addGlobalCurrent(faces, 0.12, 0.0);
-
         await grid.compute();
 
         // WOW: Heat colormap for Velocity Magnitude (extracted from Face 18/19 internally by engine or via Viz)
