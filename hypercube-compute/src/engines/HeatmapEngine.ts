@@ -37,7 +37,10 @@ export class HeatmapEngine implements IHypercubeEngine {
     /**
      * Initialisation spécifique au GPU. Compile les shaders et prépare le layout.
      */
-    public initGPU(device: GPUDevice, cubeBuffer: GPUBuffer, stride: number, mapSize: number): void {
+    /**
+     * Initialisation spécifique au GPU. Compile les shaders et prépare le layout.
+     */
+    public initGPU(device: GPUDevice, cubeBuffer: GPUBuffer, stride: number, nx: number, ny: number, nz: number): void {
         const shaderModule = device.createShaderModule({ code: this.wgslSource });
 
         const bindGroupLayout = device.createBindGroupLayout({
@@ -74,13 +77,19 @@ export class HeatmapEngine implements IHypercubeEngine {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
-        // Alignement strict WebGPU 16 bytes: vec4<u32> (mapSize), i32 (radius), f32 (weight), u32 (stride)
+        // Alignement strict WebGPU 16 bytes: vec3<u32> (nx, ny, nz), i32 (radius), f32 (weight), u32 (stride)
         const strideFloats = stride / 4;
-        const uniformData = new ArrayBuffer(16);
-        new Uint32Array(uniformData, 0)[0] = mapSize;
-        new Int32Array(uniformData, 4)[0] = this.radius;
-        new Float32Array(uniformData, 8)[0] = this.weight;
-        new Uint32Array(uniformData, 12)[0] = strideFloats;
+        const uniformData = new ArrayBuffer(32);
+        const u32 = new Uint32Array(uniformData);
+        const i32 = new Int32Array(uniformData);
+        const f32 = new Float32Array(uniformData);
+
+        u32[0] = nx;
+        u32[1] = ny;
+        u32[2] = nz;
+        i32[3] = this.radius;
+        f32[4] = this.weight;
+        u32[5] = strideFloats;
 
         device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
@@ -96,7 +105,7 @@ export class HeatmapEngine implements IHypercubeEngine {
     /**
      * Dispatch GPU des différents Compute Shaders via des passes distinctes.
      */
-    public computeGPU(device: GPUDevice, commandEncoder: GPUCommandEncoder, mapSize: number): void {
+    public computeGPU(device: GPUDevice, commandEncoder: GPUCommandEncoder, nx: number, ny: number, nz: number): void {
         if (!this.bindGroup) return;
 
         let passEncoder;
@@ -106,11 +115,11 @@ export class HeatmapEngine implements IHypercubeEngine {
             passEncoder = commandEncoder.beginComputePass();
             passEncoder.setBindGroup(0, this.bindGroup);
             passEncoder.setPipeline(this.pipelineHorizontal);
-            // Dispatch : 1 workgroup (size 256) gère 1 ligne. On dispatch mapSize (Y) workgroups.
-            passEncoder.dispatchWorkgroups(1, mapSize);
+            // Dispatch : 1 workgroup (size 256) gère 1 ligne. On dispatch ny lignes x nz couches.
+            passEncoder.dispatchWorkgroups(1, ny, nz);
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
-            commandEncoder = device.createCommandEncoder(); // Nouveau encoder par Safety
+            commandEncoder = device.createCommandEncoder();
         }
 
         // --- PASS 2: Prefix Sum Vertical ---
@@ -118,29 +127,24 @@ export class HeatmapEngine implements IHypercubeEngine {
             passEncoder = commandEncoder.beginComputePass();
             passEncoder.setBindGroup(0, this.bindGroup);
             passEncoder.setPipeline(this.pipelineVertical);
-            // Dispatch : 1 workgroup (size 256) gère 1 colonne. On dispatch mapSize (X) workgroups.
-            passEncoder.dispatchWorkgroups(mapSize, 1);
+            // Dispatch : 1 workgroup (size 256) gère 1 colonne. On dispatch nx cols x nz couches.
+            passEncoder.dispatchWorkgroups(nx, 1, nz);
             passEncoder.end();
             device.queue.submit([commandEncoder.finish()]);
             commandEncoder = device.createCommandEncoder();
         }
 
-        // --- PASS 3: Extraction Box Filter (Diffusion 2D) ---
+        // --- PASS 3: Extraction Box Filter (Diffusion 2D par couche) ---
         if (this.pipelineDiffusion) {
             passEncoder = commandEncoder.beginComputePass();
             passEncoder.setBindGroup(0, this.bindGroup);
             passEncoder.setPipeline(this.pipelineDiffusion);
-            passEncoder.dispatchWorkgroups(Math.ceil(mapSize / 16), Math.ceil(mapSize / 16));
+            passEncoder.dispatchWorkgroups(Math.ceil(nx / 16), Math.ceil(ny / 16), nz);
             passEncoder.end();
-            // Le dernier encoder.finish() sera submit par le MasterGrid.
         }
     }
 
-    /**
-     * Exécute le Summed Area Table Algorithm (Face 5) suivi 
-     * d'un Box Filter O(1) vers la Synthèse (Face 3).
-     */
-    compute(faces: Float32Array[], mapSize: number): void {
+    compute(faces: Float32Array[], nx: number, ny: number, nz: number): void {
         const face2 = faces[1]; // Contexte Binaire d'entrée
         const face3 = faces[2]; // Synthèse de Diffusion
         const face5 = faces[4]; // Cheat-code O(1) SAT
@@ -148,36 +152,38 @@ export class HeatmapEngine implements IHypercubeEngine {
         // Clear pass CPU
         if (face5) face5.fill(0);
 
-        // 1. O(N) : Génération Cristallisée (Integral Image)
-        for (let y = 0; y < mapSize; y++) {
-            for (let x = 0; x < mapSize; x++) {
-                const idx = y * mapSize + x;
-                const val = face2[idx];
-                const top = y > 0 ? face5[(y - 1) * mapSize + x] : 0;
-                const left = x > 0 ? face5[y * mapSize + (x - 1)] : 0;
-                const topLeft = (y > 0 && x > 0) ? face5[(y - 1) * mapSize + (x - 1)] : 0;
+        for (let lz = 0; lz < nz; lz++) {
+            const zOff = lz * ny * nx;
 
-                face5[idx] = val + top + left - topLeft;
+            // 1. O(N) : Génération Cristallisée (Integral Image) par couche
+            for (let y = 0; y < ny; y++) {
+                for (let x = 0; x < nx; x++) {
+                    const idx = zOff + y * nx + x;
+                    const val = face2[idx];
+                    const top = y > 0 ? face5[zOff + (y - 1) * nx + x] : 0;
+                    const left = x > 0 ? face5[zOff + y * nx + (x - 1)] : 0;
+                    const topLeft = (y > 0 && x > 0) ? face5[zOff + (y - 1) * nx + (x - 1)] : 0;
+
+                    face5[idx] = val + top + left - topLeft;
+                }
             }
-        }
 
-        // 2. O(N) : Extraction d'Influence Indépendante du Rayon
-        for (let y = 0; y < mapSize; y++) {
-            for (let x = 0; x < mapSize; x++) {
-                // Clamping (Borne Map) rapide
-                const minX = Math.max(0, x - this.radius);
-                const minY = Math.max(0, y - this.radius);
-                const maxX = Math.min(mapSize - 1, x + this.radius);
-                const maxY = Math.min(mapSize - 1, y + this.radius);
+            // 2. O(N) : Extraction d'Influence Indépendante du Rayon
+            for (let y = 0; y < ny; y++) {
+                for (let x = 0; x < nx; x++) {
+                    const minX = Math.max(0, x - this.radius);
+                    const minY = Math.max(0, y - this.radius);
+                    const maxX = Math.min(nx - 1, x + this.radius);
+                    const maxY = Math.min(ny - 1, y + this.radius);
 
-                // Récupération O(1) des Opcodes d'angles
-                const A = (minX > 0 && minY > 0) ? face5[(minY - 1) * mapSize + (minX - 1)] : 0;
-                const B = (minY > 0) ? face5[(minY - 1) * mapSize + maxX] : 0;
-                const C = (minX > 0) ? face5[maxY * mapSize + (minX - 1)] : 0;
-                const D = face5[maxY * mapSize + maxX];
+                    const A = (minX > 0 && minY > 0) ? face5[zOff + (minY - 1) * nx + (minX - 1)] : 0;
+                    const B = (minY > 0) ? face5[zOff + (minY - 1) * nx + maxX] : 0;
+                    const C = (minX > 0) ? face5[zOff + maxY * nx + (minX - 1)] : 0;
+                    const D = face5[zOff + maxY * nx + maxX];
 
-                const sum = D - B - C + A;
-                face3[y * mapSize + x] = sum * this.weight;
+                    const sum = D - B - C + A;
+                    face3[zOff + y * nx + x] = sum * this.weight;
+                }
             }
         }
     }

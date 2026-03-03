@@ -79,21 +79,27 @@ export class OceanEngine implements IHypercubeEngine {
     /**
      * Entry point: Orchestrates LBM and Bio steps
      */
-    compute(faces: Float32Array[], size: number): void {
-        this.stepLBM(faces, size);
-        this.stepBio(faces, size);
+    compute(faces: Float32Array[], nx: number, ny: number, nz: number): void {
+        for (let lz = 0; lz < nz; lz++) {
+            this.stepLBM(faces, nx, ny, lz);
+            this.stepBio(faces, nx, ny, lz);
+        }
     }
 
-    private stepLBM(faces: Float32Array[], size: number): void {
+    private stepLBM(faces: Float32Array[], nx: number, ny: number, lz: number): void {
+        const size = nx; // Assuming square for now as per old LBM code, but let's be robust
         const rho = faces[20], ux = faces[18], uy = faces[19], obst = faces[22];
+        const zOff = lz * ny * nx;
 
         let maxU = 0;
         let sumTau = 0;
         let sumRho = 0;
         let activeCells = 0;
 
-        // 0. CLEAR NEXT FRAME BUFFERS
-        for (let k = 0; k < 9; k++) faces[k + 9].fill(0);
+        // 0. CLEAR NEXT FRAME BUFFERS (Only the slice part)
+        for (let k = 0; k < 9; k++) {
+            for (let i = 0; i < nx * ny; i++) faces[k + 9][zOff + i] = 0;
+        }
 
         const mx = this.interaction.mouseX;
         const my = this.interaction.mouseY;
@@ -101,10 +107,9 @@ export class OceanEngine implements IHypercubeEngine {
         const vr2 = this.params.vortexRadius * this.params.vortexRadius;
 
         // 1. PULL-STREAMING, MACROS & COLLISION (O1 Optimized)
-        // We only compute inner domain. Ghost cells (0 and size-1) are managed by Grid Boundary Exchange.
-        for (let y = 1; y < size - 1; y++) {
-            for (let x = 1; x < size - 1; x++) {
-                const i = y * size + x;
+        for (let y = 1; y < ny - 1; y++) {
+            for (let x = 1; x < nx - 1; x++) {
+                const i = zOff + y * nx + x;
 
                 if (obst[i] > 0.5) {
                     for (let k = 0; k < 9; k++) faces[k + 9][i] = this.w[k];
@@ -115,17 +120,17 @@ export class OceanEngine implements IHypercubeEngine {
                 let r = 0, vx = 0, vy = 0;
 
                 for (let k = 0; k < 9; k++) {
-                    const nx = x - this.cx[k];
-                    const ny = y - this.cy[k];
+                    const local_nx = x - this.cx[k];
+                    const local_ny = y - this.cy[k];
 
-                    if (this.params.closedBounds && (nx <= 0 || nx >= size - 1 || ny <= 0 || ny >= size - 1)) {
-                        this.pulled_f[k] = faces[this.opp[k]][i]; // Bounds half-way bounceback on ghost cells
+                    if (this.params.closedBounds && (local_nx <= 0 || local_nx >= nx - 1 || local_ny <= 0 || local_ny >= ny - 1)) {
+                        this.pulled_f[k] = faces[this.opp[k]][i];
                     } else {
-                        const ni = ny * size + nx;
+                        const ni = zOff + local_ny * nx + local_nx;
                         if (obst[ni] > 0.5) {
-                            this.pulled_f[k] = faces[this.opp[k]][i]; // Obstacle half-way bounceback
+                            this.pulled_f[k] = faces[this.opp[k]][i];
                         } else {
-                            this.pulled_f[k] = faces[k][ni]; // Normal pull
+                            this.pulled_f[k] = faces[k][ni];
                         }
                     }
 
@@ -134,14 +139,12 @@ export class OceanEngine implements IHypercubeEngine {
                     vy += this.pulled_f[k] * this.cy[k];
                 }
 
-                // Stability Clamping (Proportional to preserve momentum direction)
+                // Stability Clamping
                 let isShockwave = false;
                 if (r < 0.8 || r > 1.2 || r < 0.0001) {
                     const targetRho = Math.max(0.8, Math.min(1.2, r < 0.0001 ? 1.0 : r));
                     const scale = targetRho / r;
-                    for (let k = 0; k < 9; k++) {
-                        this.pulled_f[k] *= scale;
-                    }
+                    for (let k = 0; k < 9; k++) this.pulled_f[k] *= scale;
                     r = targetRho;
                     isShockwave = true;
                 }
@@ -149,7 +152,7 @@ export class OceanEngine implements IHypercubeEngine {
                 vx /= r;
                 vy /= r;
 
-                // Vortex Forcing (Apply force neutrally)
+                // Vortex Forcing
                 let Fx = 0;
                 let Fy = 0;
                 if (isForcing) {
@@ -160,8 +163,6 @@ export class OceanEngine implements IHypercubeEngine {
                         const forceScale = this.params.vortexStrength * 0.005 * (1.0 - Math.sqrt(dist2) / this.params.vortexRadius);
                         Fx = -dy * forceScale;
                         Fy = dx * forceScale;
-
-                        // Modifier la vraie velocité macro pour la collision via S_norm et u2
                         vx += Fx / r;
                         vy += Fy / r;
                     }
@@ -193,38 +194,26 @@ export class OceanEngine implements IHypercubeEngine {
                     }
                 } else {
                     let Pxx = 0, Pyy = 0, Pxy = 0;
-
                     for (let k = 0; k < 9; k++) {
                         const cu = 3 * (this.cx[k] * vx + this.cy[k] * vy);
                         this.feq_cache[k] = this.w[k] * r * (1 + cu + 0.5 * cu * cu - 1.5 * u2_clamped);
-
                         const fneq = this.pulled_f[k] - this.feq_cache[k];
                         Pxx += fneq * this.cx[k] * this.cx[k];
                         Pyy += fneq * this.cy[k] * this.cy[k];
                         Pxy += fneq * this.cx[k] * this.cy[k];
                     }
 
-                    // Avoid NaN Explosions triggered by S_norm blowing up
                     let S_norm = Math.sqrt(2 * (Pxx * Pxx + Pyy * Pyy + 2 * Pxy * Pxy));
                     if (S_norm > 10.0 || isNaN(S_norm)) S_norm = 10.0;
-
                     let tau_eff = this.params.tau_0 + this.params.smagorinsky * S_norm;
-                    if (isNaN(tau_eff) || tau_eff < 0.505) {
-                        tau_eff = 0.505;
-                    } else if (tau_eff > 2.0) {
-                        tau_eff = 2.0;
-                    }
+                    if (isNaN(tau_eff) || tau_eff < 0.505) tau_eff = 0.505;
+                    else if (tau_eff > 2.0) tau_eff = 2.0;
 
                     sumTau += tau_eff;
                     sumRho += r;
                     activeCells++;
 
                     for (let k = 0; k < 9; k++) {
-                        // Guo Forcing term addition to preserve strictly rho
-                        const cu = 3 * (this.cx[k] * vx + this.cy[k] * vy);
-                        const Fk = (1 - 0.5 / tau_eff) * this.w[k] * (3 * (this.cx[k] - vx) + 9 * (this.cx[k] * vx + this.cy[k] * vy) * this.cx[k]) * Fx
-                            + (1 - 0.5 / tau_eff) * this.w[k] * (3 * (this.cy[k] - vy) + 9 * (this.cx[k] * vx + this.cy[k] * vy) * this.cy[k]) * Fy;
-
                         faces[k + 9][i] = this.pulled_f[k] - (this.pulled_f[k] - this.feq_cache[k]) / tau_eff;
                     }
                 }
@@ -237,65 +226,55 @@ export class OceanEngine implements IHypercubeEngine {
         }
         this.stats.maxU = maxU;
 
-        // 4. MEMORY SWAP
+        // 4. MEMORY SWAP (Only for the slice)
         for (let k = 0; k < 9; k++) {
-            const tmp = faces[k];
-            faces[k] = faces[k + 9];
-            faces[k + 9] = tmp;
+            for (let i = 0; i < nx * ny; i++) {
+                const idx = zOff + i;
+                const tmp = faces[k][idx];
+                faces[k][idx] = faces[k + 9][idx];
+                faces[k + 9][idx] = tmp;
+            }
         }
     }
 
-    private stepBio(faces: Float32Array[], size: number): void {
+    private stepBio(faces: Float32Array[], nx: number, ny: number, lz: number): void {
         const bio = faces[21];
-        const bio_next = faces[17]; // Proxy temp
-        const area = size * size;
+        const bio_next = faces[17];
+        const zOff = lz * ny * nx;
 
-        // Clean Bio Temporary Buffer (Face 17)
-        bio_next.fill(0);
-
-        for (let y = 1; y < size - 1; y++) {
-            for (let x = 1; x < size - 1; x++) {
-                const i = y * size + x;
+        for (let y = 1; y < ny - 1; y++) {
+            for (let x = 1; x < nx - 1; x++) {
+                const i = zOff + y * nx + x;
 
                 // Diffusion laplacienne
-                const lap = bio[i - 1] + bio[i + 1] + bio[i - size] + bio[i + size] - 4 * bio[i];
+                const lap = bio[i - 1] + bio[i + 1] + bio[i - nx] + bio[i + nx] - 4 * bio[i];
                 let next = bio[i] + this.params.bioDiffusion * lap + this.params.bioGrowth * bio[i] * (1 - bio[i]);
 
-                // Application des vortex LBM sur la Bio (Advection Bilinéaire)
+                // Advection
                 const ux = faces[18][i];
                 const uy = faces[19][i];
-
-                const advectX = x - ux * 0.8;
-                const advectY = y - uy * 0.8;
-
-                // Clamp aux bords internes
-                const ax = Math.max(1, Math.min(size - 2, advectX));
-                const ay = Math.max(1, Math.min(size - 2, advectY));
-
+                const ax = Math.max(1, Math.min(nx - 2, x - ux * 0.8));
+                const ay = Math.max(1, Math.min(ny - 2, y - uy * 0.8));
                 const ix = Math.floor(ax);
                 const iy = Math.floor(ay);
                 const fx = ax - ix;
                 const fy = ay - iy;
 
-                const v00 = bio[iy * size + ix];
-                const v10 = bio[iy * size + Math.min(ix + 1, size - 2)];
-                const v01 = bio[Math.min(iy + 1, size - 2) * size + ix];
-                const v11 = bio[Math.min(iy + 1, size - 2) * size + Math.min(ix + 1, size - 2)];
+                const v00 = bio[zOff + iy * nx + ix];
+                const v10 = bio[zOff + iy * nx + Math.min(ix + 1, nx - 2)];
+                const v01 = bio[zOff + Math.min(iy + 1, ny - 2) * nx + ix];
+                const v11 = bio[zOff + Math.min(iy + 1, ny - 2) * nx + Math.min(ix + 1, nx - 2)];
 
-                const advected = (1 - fy) * ((1 - fx) * v00 + fx * v10) +
-                    fy * ((1 - fx) * v01 + fx * v11);
-
+                const advected = (1 - fy) * ((1 - fx) * v00 + fx * v10) + fy * ((1 - fx) * v01 + fx * v11);
                 next = advected + this.params.bioDiffusion * lap + this.params.bioGrowth * bio[i] * (1 - bio[i]);
 
                 if (next < 0) next = 0;
                 if (next > 1) next = 1;
                 bio_next[i] = next;
-
-                // Bio no longer acts as physical obstacle to allow the fixed Island to persist.
             }
         }
 
-        for (let i = 0; i < area; i++) bio[i] = bio_next[i];
+        for (let i = 0; i < nx * ny; i++) bio[zOff + i] = bio_next[zOff + i];
     }
 }
 

@@ -119,7 +119,7 @@ export class HypercubeCompositor {
             size: 8, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
         const strideFloats = firstCube.stride / 4;
-        this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([firstCube.mapSize, strideFloats]));
+        this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([firstCube.nx, strideFloats]));
 
         // BindGroup: Lien avec le buffer unique du Cube et l'uniform
         this.bindGroup = this.device.createBindGroup({
@@ -226,16 +226,17 @@ export class HypercubeCompositor {
         const firstCube = this.grid.cubes[0][0];
         if (!firstCube) return;
 
-        const mapSize = firstCube.mapSize;
+        const nx = firstCube.nx;
+        const ny = firstCube.ny;
         const faces = firstCube.faces;
         const outData = this.imageData.data;
 
         // Note: Cette implémentation CPU est sub-optimale N^2, elle est fournie à titre de Fallback UI pur,
         // et n'exploite un WorkerThread que si explicitement mis dans un OffscreenCanvas par l'utilisateur.
 
-        for (let y = 0; y < mapSize; y++) {
-            for (let x = 0; x < mapSize; x++) {
-                const idx = y * mapSize + x;
+        for (let y = 0; y < ny; y++) {
+            for (let x = 0; x < nx; x++) {
+                const idx = y * nx + x;
                 const pxIdx = idx * 4;
 
                 if (this.options.cpuFragmentShader) {

@@ -17,12 +17,15 @@ export class HypercubeMasterBuffer {
     }
 
     /**
-     * Alloue les octets nécessaires pour un Cube de N Faces en O(1).
+     * Alloue les octets nécessaires pour un Cube 3D de N Faces en O(1).
      * Garantit un alignement de 256 octets (WebGPU optimal stride).
-     * @param mapSize Résolution (ex: 400x400)
+     * @param nx Largeur
+     * @param ny Hauteur
+     * @param nz Profondeur (par défaut 1 pour compatibilité 2D)
+     * @param numFaces Nombre de faces
      * @returns Un objet contenant l'offset de début et le stride réel (padding inclus)
      */
-    allocateCube(mapSize: number, numFaces: number = 6): { offset: number, stride: number } {
+    allocateCube(nx: number, ny: number, nz: number = 1, numFaces: number = 6): { offset: number, stride: number } {
         const ALIGNMENT = 256;
 
         // 1. Aligner le début du cube
@@ -30,13 +33,14 @@ export class HypercubeMasterBuffer {
         const startOffset = this.offset;
 
         // 2. Calculer le stride aligné pour chaque face
-        const bytesPerFaceRaw = mapSize * mapSize * 4; // 4 octets par float32
+        const cellsPerFace = nx * ny * nz;
+        const bytesPerFaceRaw = cellsPerFace * 4; // 4 octets par float32
         const stride = Math.ceil(bytesPerFaceRaw / ALIGNMENT) * ALIGNMENT;
 
         const totalCubeBytes = stride * numFaces;
 
         if (this.offset + totalCubeBytes > this.buffer.byteLength) {
-            throw new Error(`[HypercubeMasterBuffer] Out Of Memory. Impossible d'allouer ${totalCubeBytes} bytes supplémentaires.`);
+            throw new Error(`[HypercubeMasterBuffer] Out Of Memory. Impossible d'allouer ${totalCubeBytes} bytes supplémentaires (3D: ${nx}x${ny}x${nz}).`);
         }
 
         this.offset += totalCubeBytes;

@@ -12,7 +12,9 @@ export class HypercubeGrid {
     public cubes: (HypercubeChunk | null)[][] = [];
     public readonly cols: number;
     public readonly rows: number;
-    public readonly cubeSize: number;
+    public readonly nx: number;
+    public readonly ny: number;
+    public readonly nz: number;
     public isPeriodic: boolean;
     public readonly mode: 'cpu' | 'webgpu';
     public masterBuffer: HypercubeMasterBuffer;
@@ -23,7 +25,7 @@ export class HypercubeGrid {
     constructor(
         cols: number,
         rows: number,
-        cubeSize: number,
+        resolution: number | { nx: number, ny: number, nz?: number },
         masterBuffer: HypercubeMasterBuffer,
         engineFactory: () => IHypercubeEngine,
         numFaces: number = 6,
@@ -32,7 +34,17 @@ export class HypercubeGrid {
     ) {
         this.cols = cols;
         this.rows = rows;
-        this.cubeSize = cubeSize;
+
+        if (typeof resolution === 'number') {
+            this.nx = resolution;
+            this.ny = resolution;
+            this.nz = 1;
+        } else {
+            this.nx = resolution.nx;
+            this.ny = resolution.ny;
+            this.nz = resolution.nz ?? 1;
+        }
+
         this.masterBuffer = masterBuffer;
         this.isPeriodic = isPeriodic;
         this.mode = mode;
@@ -47,7 +59,7 @@ export class HypercubeGrid {
         for (let y = 0; y < rows; y++) {
             this.cubes[y] = [];
             for (let x = 0; x < cols; x++) {
-                const cube = new HypercubeChunk(x, y, cubeSize, masterBuffer, finalNumFaces);
+                const cube = new HypercubeChunk(x, y, this.nx, this.ny, this.nz, masterBuffer, finalNumFaces);
                 cube.setEngine(y === 0 && x === 0 ? tempEngine : engineFactory());
                 this.cubes[y][x] = cube;
             }
@@ -61,7 +73,7 @@ export class HypercubeGrid {
     static async create(
         cols: number,
         rows: number,
-        cubeSize: number,
+        resolution: number | { nx: number, ny: number, nz?: number },
         masterBuffer: HypercubeMasterBuffer,
         engineFactory: () => IHypercubeEngine,
         numFaces: number = 6,
@@ -81,7 +93,7 @@ export class HypercubeGrid {
             }
         }
 
-        const grid = new HypercubeGrid(cols, rows, cubeSize, masterBuffer, engineFactory, numFaces, isPeriodic, mode);
+        const grid = new HypercubeGrid(cols, rows, resolution, masterBuffer, engineFactory, numFaces, isPeriodic, mode);
 
         // Initialiser la VRAM de tous les cubes
         if (mode === 'webgpu') {
@@ -121,7 +133,7 @@ export class HypercubeGrid {
                 for (let x = 0; x < this.cols; x++) {
                     const cube = this.cubes[y][x];
                     if (cube && cube.engine && cube.engine.computeGPU) {
-                        cube.engine.computeGPU(HypercubeGPUContext.device, commandEncoder, cube.mapSize);
+                        cube.engine.computeGPU(HypercubeGPUContext.device, commandEncoder, cube.nx, cube.ny, cube.nz);
                     }
                 }
             }
@@ -177,11 +189,11 @@ export class HypercubeGrid {
      * Recopie les vecteurs périphériques (1 pixel de profondeur) vers les bords des voisins.
      */
     private synchronizeBoundaries(f: number) {
-        const s = this.cubeSize;
-        const s_minus_1 = s - 1;
-        const s_minus_2 = s - 2;
+        const nx = this.nx;
+        const ny = this.ny;
+        const nz = this.nz;
 
-        // PASS 1: X-axis (Left/Right)
+        // PASS 1: X-axis (Left/Right exchange of YZ planes)
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 const cube = this.cubes[y][x]!;
@@ -191,8 +203,10 @@ export class HypercubeGrid {
                 if (x < this.cols - 1 || this.isPeriodic) {
                     const rightCube = this.cubes[y][(x + 1) % this.cols]!;
                     const rightData = rightCube.faces[f];
-                    for (let row = 1; row < s_minus_1; row++) {
-                        rightData[row * s + 0] = data[row * s + s_minus_2];
+                    for (let lz = 0; lz < nz; lz++) {
+                        for (let ly = 1; ly < ny - 1; ly++) {
+                            rightData[rightCube.getIndex(0, ly, lz)] = data[cube.getIndex(nx - 2, ly, lz)];
+                        }
                     }
                 }
 
@@ -200,14 +214,16 @@ export class HypercubeGrid {
                 if (x > 0 || this.isPeriodic) {
                     const leftCube = this.cubes[y][(x - 1 + this.cols) % this.cols]!;
                     const leftData = leftCube.faces[f];
-                    for (let row = 1; row < s_minus_1; row++) {
-                        leftData[row * s + s_minus_1] = data[row * s + 1];
+                    for (let lz = 0; lz < nz; lz++) {
+                        for (let ly = 1; ly < ny - 1; ly++) {
+                            leftData[leftCube.getIndex(nx - 1, ly, lz)] = data[cube.getIndex(1, ly, lz)];
+                        }
                     }
                 }
             }
         }
 
-        // PASS 2: Y-axis (Top/Bottom)
+        // PASS 2: Y-axis (Top/Bottom exchange of XZ planes)
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 const cube = this.cubes[y][x]!;
@@ -215,47 +231,57 @@ export class HypercubeGrid {
 
                 // Bottom neighbor
                 if (y < this.rows - 1 || this.isPeriodic) {
-                    const bottomCube = this.cubes[(y + 1) % this.rows][x]!;
-                    const bottomData = bottomCube.faces[f];
-                    bottomData.set(data.subarray(s_minus_2 * s, s_minus_2 * s + s), 0);
+                    const botCube = this.cubes[(y + 1) % this.rows][x]!;
+                    const botData = botCube.faces[f];
+                    for (let lz = 0; lz < nz; lz++) {
+                        for (let lx = 1; lx < nx - 1; lx++) {
+                            botData[botCube.getIndex(lx, 0, lz)] = data[cube.getIndex(lx, ny - 2, lz)];
+                        }
+                    }
                 }
 
                 // Top neighbor
                 if (y > 0 || this.isPeriodic) {
-                    const topCube = this.cubes[(y - 1 + this.rows) % this.rows][x]!;
+                    const topRow = (y === 0) ? this.rows - 1 : y - 1;
+                    const topCube = this.cubes[topRow][x]!;
                     const topData = topCube.faces[f];
-                    topData.set(data.subarray(1 * s, 1 * s + s), s_minus_1 * s);
+                    for (let lz = 0; lz < nz; lz++) {
+                        for (let lx = 1; lx < nx - 1; lx++) {
+                            topData[topCube.getIndex(lx, ny - 1, lz)] = data[cube.getIndex(lx, 1, lz)];
+                        }
+                    }
                 }
             }
         }
 
-        // PASS 3: Corners (Suggestion #8 - Explicit Diagonal Sync for 100% Robustness & future 3D)
+        // PASS 3: Corners (Explicit Diagonal Sync for 3D stacks)
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 const cube = this.cubes[y][x]!;
                 const data = cube.faces[f];
 
-                // Determine neighbors
                 const nxP = (x + 1) % this.cols;
                 const nxM = (x - 1 + this.cols) % this.cols;
                 const nyP = (y + 1) % this.rows;
                 const nyM = (y - 1 + this.rows) % this.rows;
 
-                // 1. Bottom-Right Neighbor
-                if (this.isPeriodic || (x < this.cols - 1 && y < this.rows - 1)) {
-                    this.cubes[nyP][nxP]!.faces[f][0] = data[s_minus_2 * s + s_minus_2];
-                }
-                // 2. Bottom-Left Neighbor
-                if (this.isPeriodic || (x > 0 && y < this.rows - 1)) {
-                    this.cubes[nyP][nxM]!.faces[f][s_minus_1] = data[s_minus_2 * s + 1];
-                }
-                // 3. Top-Right Neighbor
-                if (this.isPeriodic || (x < this.cols - 1 && y > 0)) {
-                    this.cubes[nyM][nxP]!.faces[f][s_minus_1 * s] = data[1 * s + s_minus_2];
-                }
-                // 4. Top-Left Neighbor
-                if (this.isPeriodic || (x > 0 && y > 0)) {
-                    this.cubes[nyM][nxM]!.faces[f][s_minus_1 * s + s_minus_1] = data[1 * s + 1];
+                for (let lz = 0; lz < nz; lz++) {
+                    // 1. Bottom-Right Neighbor
+                    if (this.isPeriodic || (x < this.cols - 1 && y < this.rows - 1)) {
+                        this.cubes[nyP][nxP]!.faces[f][this.cubes[nyP][nxP]!.getIndex(0, 0, lz)] = data[cube.getIndex(nx - 2, ny - 2, lz)];
+                    }
+                    // 2. Bottom-Left Neighbor
+                    if (this.isPeriodic || (x > 0 && y < this.rows - 1)) {
+                        this.cubes[nyP][nxM]!.faces[f][this.cubes[nyP][nxM]!.getIndex(nx - 1, 0, lz)] = data[cube.getIndex(1, ny - 2, lz)];
+                    }
+                    // 3. Top-Right Neighbor
+                    if (this.isPeriodic || (x < this.cols - 1 && y > 0)) {
+                        this.cubes[nyM][nxP]!.faces[f][this.cubes[nyM][nxP]!.getIndex(0, ny - 1, lz)] = data[cube.getIndex(nx - 2, 1, lz)];
+                    }
+                    // 4. Top-Left Neighbor
+                    if (this.isPeriodic || (x > 0 && y > 0)) {
+                        this.cubes[nyM][nxM]!.faces[f][this.cubes[nyM][nxM]!.getIndex(nx - 1, ny - 1, lz)] = data[cube.getIndex(1, 1, lz)];
+                    }
                 }
             }
         }

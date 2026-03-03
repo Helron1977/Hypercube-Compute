@@ -25,7 +25,10 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     /**
      * Initialisation WebGPU : Prépare les pipelines et les bindings.
      */
-    public initGPU(device: GPUDevice, cubeBuffer: GPUBuffer, stride: number, mapSize: number): void {
+    /**
+     * Initialisation spécifique au GPU. Prépare les pipelines et les bindings.
+     */
+    public initGPU(device: GPUDevice, cubeBuffer: GPUBuffer, stride: number, nx: number, ny: number, nz: number): void {
         const shaderModule = device.createShaderModule({ code: this.wgslSource });
 
         const bindGroupLayout = device.createBindGroupLayout({
@@ -64,10 +67,15 @@ export class AerodynamicsEngine implements IHypercubeEngine {
 
         const strideFloats = stride / 4;
         const uniformData = new ArrayBuffer(32);
-        new Uint32Array(uniformData, 0, 1)[0] = mapSize;
-        new Float32Array(uniformData, 4, 1)[0] = 0.12; // u0
-        new Float32Array(uniformData, 8, 1)[0] = 1.95; // omega
-        new Uint32Array(uniformData, 12, 1)[0] = strideFloats;
+        const u32 = new Uint32Array(uniformData);
+        const f32 = new Float32Array(uniformData);
+
+        u32[0] = nx;
+        u32[1] = ny;
+        u32[2] = nz;
+        f32[3] = 0.12; // u0
+        f32[4] = 1.95; // omega
+        u32[5] = strideFloats;
 
         device.queue.writeBuffer(this.uniformBuffer, 0, uniformData);
 
@@ -83,29 +91,29 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     /**
      * Dispatch GPU via deux passes distinctes.
      */
-    public computeGPU(device: GPUDevice, commandEncoder: GPUCommandEncoder, mapSize: number): void {
+    public computeGPU(device: GPUDevice, commandEncoder: GPUCommandEncoder, nx: number, ny: number, nz: number): void {
         if (!this.bindGroup || !this.pipelineLBM || !this.pipelineVorticity) return;
 
-        const workgroupSize = 16;
-        const workgroupCount = Math.ceil(mapSize / workgroupSize);
+        const wgSize = 16;
+        const wgX = Math.ceil(nx / wgSize);
+        const wgY = Math.ceil(ny / wgSize);
 
         // --- PASS 1: LBM Core (Collision + Streaming) ---
         const pass1 = commandEncoder.beginComputePass();
         pass1.setBindGroup(0, this.bindGroup);
         pass1.setPipeline(this.pipelineLBM);
-        pass1.dispatchWorkgroups(workgroupCount, workgroupCount);
+        pass1.dispatchWorkgroups(wgX, wgY, nz);
         pass1.end();
 
         // --- PASS 2: Vorticité (Dépend de Pass 1) ---
         const pass2 = commandEncoder.beginComputePass();
         pass2.setBindGroup(0, this.bindGroup);
         pass2.setPipeline(this.pipelineVorticity);
-        pass2.dispatchWorkgroups(workgroupCount, workgroupCount);
+        pass2.dispatchWorkgroups(wgX, wgY, nz);
         pass2.end();
     }
 
-    public compute(faces: FlatTensorView[], mapSize: number): void {
-        const N = mapSize;
+    public compute(faces: Float32Array[], nx: number, ny: number, nz: number): void {
         const obstacles = faces[18];
         const ux_out = faces[19];
         const uy_out = faces[20];
@@ -121,7 +129,7 @@ export class AerodynamicsEngine implements IHypercubeEngine {
 
         // 0. INITIALISATION
         if (!this.initialized) {
-            for (let idx = 0; idx < N * N; idx++) {
+            for (let idx = 0; idx < nx * ny * nz; idx++) {
                 const rho = 1.0;
                 const ux = u0; const uy = 0.0;
                 const u_sq = ux * ux + uy * uy;
@@ -137,68 +145,77 @@ export class AerodynamicsEngine implements IHypercubeEngine {
 
         let frameDrag = 0;
 
-        // 1. LBM CORE
-        for (let y = 0; y < N; y++) {
-            for (let x = 0; x < N; x++) {
-                const idx = y * N + x;
-                if (obstacles[idx] > 0) {
-                    ux_out[idx] = 0;
-                    uy_out[idx] = 0;
-                    continue;
-                }
+        for (let lz = 0; lz < nz; lz++) {
+            const zOff = lz * ny * nx;
 
-                let rho = 0, ux = 0, uy = 0;
-                for (let i = 0; i < 9; i++) {
-                    const f_val = faces[i][idx];
-                    rho += f_val;
-                    ux += cx[i] * f_val;
-                    uy += cy[i] * f_val;
-                }
+            // 1. LBM CORE
+            for (let y = 0; y < ny; y++) {
+                for (let x = 0; x < nx; x++) {
+                    const idx = zOff + y * nx + x;
+                    if (obstacles[idx] > 0) {
+                        ux_out[idx] = 0;
+                        uy_out[idx] = 0;
+                        continue;
+                    }
 
-                if (x === 0) { ux = u0; uy = 0.0; rho = 1.0; }
+                    let rho = 0, ux = 0, uy = 0;
+                    for (let i = 0; i < 9; i++) {
+                        const f_val = faces[i][idx];
+                        rho += f_val;
+                        ux += cx[i] * f_val;
+                        uy += cy[i] * f_val;
+                    }
 
-                if (rho > 0) { ux /= rho; uy /= rho; }
-                ux_out[idx] = ux;
-                uy_out[idx] = uy;
+                    if (x === 0) { ux = u0; uy = 0.0; rho = 1.0; }
 
-                const u_sq = ux * ux + uy * uy;
-                for (let i = 0; i < 9; i++) {
-                    const cu = cx[i] * ux + cy[i] * uy;
-                    const feq = w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u_sq);
-                    const f_post = faces[i][idx] * (1.0 - omega) + feq * omega;
+                    if (rho > 0) { ux /= rho; uy /= rho; }
+                    ux_out[idx] = ux;
+                    uy_out[idx] = uy;
 
-                    let nx = x + cx[i], ny = y + cy[i];
-                    if (ny < 0) ny = N - 1; else if (ny >= N) ny = 0;
-                    if (nx < 0 || nx >= N) continue;
+                    const u_sq = ux * ux + uy * uy;
+                    for (let i = 0; i < 9; i++) {
+                        const cu = cx[i] * ux + cy[i] * uy;
+                        const feq = w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u_sq);
+                        const f_post = faces[i][idx] * (1.0 - omega) + feq * omega;
 
-                    const nIdx = ny * N + nx;
-                    if (obstacles[nIdx] > 0) {
-                        faces[opp[i] + 9][idx] = f_post;
-                        frameDrag += f_post * cx[i];
-                    } else {
-                        faces[i + 9][nIdx] = f_post;
+                        let nnx = x + cx[i], nny = y + cy[i];
+                        if (nny < 0) nny = ny - 1; else if (nny >= ny) nny = 0;
+                        if (nnx < 0 || nnx >= nx) continue;
+
+                        const nIdx = zOff + nny * nx + nnx;
+                        if (obstacles[nIdx] > 0) {
+                            faces[opp[i] + 9][idx] = f_post;
+                            frameDrag += f_post * cx[i];
+                        } else {
+                            faces[i + 9][nIdx] = f_post;
+                        }
                     }
                 }
             }
-        }
 
-        // 2. SWAP & STATS
-        for (let i = 0; i < 9; i++) faces[i].set(faces[i + 9]);
-        this.dragScore = this.dragScore * 0.95 + (frameDrag * 100) * 0.05;
+            // 2. SWAP par couche
+            for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < nx * ny; j++) {
+                    const idx = zOff + j;
+                    faces[i][idx] = faces[i + 9][idx];
+                }
+            }
 
-        // 3. VORTICITY
-        for (let y = 0; y < N; y++) {
-            const row = y * N;
-            const yM = y > 0 ? y - 1 : 0;
-            const yP = y < N - 1 ? y + 1 : N - 1;
-            for (let x = 0; x < N; x++) {
-                const xM = x > 0 ? x - 1 : 0;
-                const xP = x < N - 1 ? x + 1 : N - 1;
-                const dUy_dx = uy_out[row + xP] - uy_out[row + xM];
-                const dUx_dy = ux_out[yP * N + x] - ux_out[yM * N + x];
-                curl_out[row + x] = dUy_dx - dUx_dy;
+            // 3. VORTICITY
+            for (let y = 0; y < ny; y++) {
+                const yM = y > 0 ? y - 1 : 0;
+                const yP = y < ny - 1 ? y + 1 : ny - 1;
+                for (let x = 0; x < nx; x++) {
+                    const xM = x > 0 ? x - 1 : 0;
+                    const xP = x < nx - 1 ? x + 1 : nx - 1;
+                    const dUy_dx = uy_out[zOff + y * nx + xP] - uy_out[zOff + y * nx + xM];
+                    const dUx_dy = ux_out[zOff + yP * nx + x] - ux_out[zOff + yM * nx + x];
+                    curl_out[zOff + y * nx + x] = dUy_dx - dUx_dy;
+                }
             }
         }
+
+        this.dragScore = this.dragScore * 0.95 + (frameDrag * 100 / nz) * 0.05;
     }
 
     public get wgslSource(): string {

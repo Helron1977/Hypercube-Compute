@@ -24,7 +24,7 @@ export class OceanSimulatorAddon {
 
         // 1. Initialize Hypercube Memory System (24 faces for LBM + Bio + Temp)
         this.master = new HypercubeMasterBuffer();
-        this.cube = new HypercubeChunk(0, 0, size, this.master, 24);
+        this.cube = new HypercubeChunk(0, 0, size, size, 1, this.master, 24, 0);
 
         // 2. Initialize Engine
         this.engine = new OceanEngine();

@@ -1,6 +1,6 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/Helron1977/Hypercube-engine/main/docs/assets/logo.png" alt="Hypercube Engine Logo" width="200" style="border-radius:20px;"/>
-  <h1>🌊 Hypercube Engine V3 🚀</h1>
+  <h1>🌊 Hypercube Engine V4 🚀</h1>
   <p><strong>A GodMode O(1) Tensor-based Compute Engine for Web & Node.js</strong></p>
   
   [![npm version](https://img.shields.io/npm/v/hypercube-compute.svg?style=flat-square)](https://www.npmjs.com/package/hypercube-compute)
@@ -22,6 +22,22 @@ By structuring state as mathematical tensors ("faces" of a cube) rather than dis
 - Multi-threading (via Web Workers & `SharedArrayBuffer`) and **WebGPU hardware acceleration** become trivial because all data is already in a raw binary buffer format.
 
 If you are trying to implement **Cellular Automata, Fluid Dynamics (LBM), Heat Diffusion, or massive procedurally generated ecosystems** in JavaScript without resorting to C++ WebAssembly, Hypercube provides the high-performance memory layout you need.
+
+---
+
+## 🚀 Native 3D Compute (NEW in V4)
+
+V4 introduces native 3D tensor support, allowing simulations to scale across `[nx, ny, nz]` dimensions while maintaining O(1) complexity.
+
+### 🔥 Volume Diffusion Engine
+A specialized 3D solver with a 7-point stencil and periodic boundaries. 
+- **Applications**: Smoke, heat, chemical concentration, volumetric fog.
+- **Performance**: 64³ grid (262k voxels) processed in ~3ms on CPU.
+
+### 🎨 Visualization Helpers
+- **IsoRenderer**: 2.5D Isometric projection on Canvas 2D with depth sorting.
+- **MarchingCubes (Light)**: High-speed surface extraction for volumetric data.
+- **ThreeJS Bridge**: Easy export to `THREE.Data3DTexture` and `BufferGeometry`.
 
 ---
 

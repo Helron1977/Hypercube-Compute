@@ -1,0 +1,117 @@
+import { HypercubeChunk } from "../core/HypercubeChunk";
+
+/**
+ * HypercubeViz
+ * Collection de helpers pour la visualisation et le débogage de données volumétriques.
+ */
+export class HypercubeViz {
+    /**
+     * Extrait une tranche 2D (Slice Z) d'une face spécifique à la profondeur lz.
+     * @returns Un Float32Array de taille nx * ny.
+     */
+    static getSliceZ(chunk: HypercubeChunk, faceIndex: number, lz: number): Float32Array {
+        if (lz < 0 || lz >= chunk.nz) {
+            throw new Error(`Slice index ${lz} out of bounds (0-${chunk.nz - 1})`);
+        }
+
+        const nx = chunk.nx;
+        const ny = chunk.ny;
+        const face = chunk.faces[faceIndex];
+        const sliceSize = nx * ny;
+        const offset = lz * sliceSize;
+
+        // On retourne une sous-vue (subarray) pour éviter la copie si possible, 
+        // ou on peut copier si on veut une extraction isolée.
+        return face.slice(offset, offset + sliceSize);
+    }
+
+    /**
+     * Projection Isométrique simplifiée (Top-down accumulation).
+     * Projette les valeurs 3D sur un plan 2D en prenant la valeur max ou la moyenne.
+     * Utile pour avoir une vue d'ensemble sans moteur 3D.
+     */
+    static projectIso(chunk: HypercubeChunk, faceIndex: number, mode: 'max' | 'average' = 'max'): Float32Array {
+        const nx = chunk.nx;
+        const ny = chunk.ny;
+        const nz = chunk.nz;
+        const face = chunk.faces[faceIndex];
+        const result = new Float32Array(nx * ny);
+
+        for (let y = 0; y < ny; y++) {
+            for (let x = 0; x < nx; x++) {
+                let acc = 0;
+                let maxVal = -Infinity;
+
+                for (let z = 0; z < nz; z++) {
+                    const val = face[(z * ny * nx) + (y * nx) + x];
+                    acc += val;
+                    if (val > maxVal) maxVal = val;
+                }
+
+                const idx = y * nx + x;
+                result[idx] = (mode === 'max') ? maxVal : acc / nz;
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Exporte une face volumétrique complète dans un format binaire brut (Buffer).
+     * Utile pour importer dans des outils comme ImageJ, Slicer, ou des voxels viewers.
+     */
+    static exportVolume(chunk: HypercubeChunk, faceIndex: number): Uint8Array {
+        const face = chunk.faces[faceIndex];
+        // On convertit les Float32 en Uint8 (0.0-1.0 -> 0-255) pour la portabilité standard
+        const buffer = new Uint8Array(face.length);
+        for (let i = 0; i < face.length; i++) {
+            buffer[i] = Math.max(0, Math.min(255, face[i] * 255));
+        }
+        return buffer;
+    }
+
+    /**
+     * Injection d'une sphère de densité dans le volume.
+     */
+    static injectSphere(chunk: HypercubeChunk, faceIndex: number, cx: number, cy: number, cz: number, radius: number, value: number = 1.0): void {
+        const face = chunk.faces[faceIndex];
+        const { nx, ny, nz } = chunk;
+        const r2 = radius * radius;
+
+        for (let z = 0; z < nz; z++) {
+            const zOff = z * ny * nx;
+            const dz = z - cz;
+            for (let y = 0; y < ny; y++) {
+                const yOff = y * nx;
+                const dy = y - cy;
+                for (let x = 0; x < nx; x++) {
+                    const dx = x - cx;
+                    if (dx * dx + dy * dy + dz * dz <= r2) {
+                        face[zOff + yOff + x] = value;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Injection d'un plan (slice) de densité constante.
+     */
+    static injectSlice(chunk: HypercubeChunk, faceIndex: number, axis: 'x' | 'y' | 'z', index: number, value: number = 1.0): void {
+        const face = chunk.faces[faceIndex];
+        const { nx, ny, nz } = chunk;
+
+        for (let z = 0; z < nz; z++) {
+            if (axis === 'z' && z !== index) continue;
+            const zOff = z * ny * nx;
+            for (let y = 0; y < ny; y++) {
+                if (axis === 'y' && y !== index) continue;
+                const yOff = y * nx;
+                for (let x = 0; x < nx; x++) {
+                    if (axis === 'x' && x !== index) continue;
+                    face[zOff + yOff + x] = value;
+                }
+            }
+        }
+    }
+}

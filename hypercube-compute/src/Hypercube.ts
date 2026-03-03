@@ -25,12 +25,23 @@ export class Hypercube {
     /**
      * Forge un nouveau Cube (View Paging) depuis le Buffer Maître.
      */
-    public createCube(name: string, mapSize: number, engine: IHypercubeEngine, numFaces: number = 6): HypercubeChunk {
+    public createCube(name: string, resolution: number | { nx: number, ny: number, nz?: number }, engine: IHypercubeEngine, numFaces: number = 6): HypercubeChunk {
         if (this.cubes.has(name)) {
             throw new Error(`Cube avec le nom ${name} existe déjà.`);
         }
 
-        const cube = new HypercubeChunk(0, 0, mapSize, this._masterBuffer, numFaces);
+        let nx, ny, nz;
+        if (typeof resolution === 'number') {
+            nx = resolution;
+            ny = resolution;
+            nz = 1;
+        } else {
+            nx = resolution.nx;
+            ny = resolution.ny;
+            nz = resolution.nz ?? 1;
+        }
+
+        const cube = new HypercubeChunk(0, 0, nx, ny, nz, this._masterBuffer, numFaces, 0);
         cube.setEngine(engine);
         this.cubes.set(name, cube);
         return cube;

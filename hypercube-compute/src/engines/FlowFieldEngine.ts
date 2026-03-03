@@ -22,41 +22,41 @@ export class FlowFieldEngine implements IHypercubeEngine {
         // isPeriodic is handled by the IHypercubeEngine interface and Grid
     }
 
-    public async compute(faces: Float32Array[], mapSize: number, chunkX: number = 0, chunkY: number = 0): Promise<void> {
+    public async compute(faces: Float32Array[], nx: number, ny: number, nz: number, chunkX: number = 0, chunkY: number = 0, chunkZ: number = 0): Promise<void> {
         const face3_Integration = faces[2];
         const face4_ForceX = faces[3];
         const face5_ForceY = faces[4];
 
         // Global offsets
-        const offsetX = chunkX * mapSize;
-        const offsetY = chunkY * mapSize;
+        const offsetX = chunkX * nx;
+        const offsetY = chunkY * ny;
 
-        // Pure Euclidean Gravitational Field (No Wrap-around)
-        // This is the "Bowling Ball on a Trampoline" model.
-        for (let y = 0; y < mapSize; y++) {
-            const rowOffset = y * mapSize;
-            const globalY = offsetY + y;
-            const dy = globalY - this.targetY;
-            const dySq = dy * dy;
+        for (let lz = 0; lz < nz; lz++) {
+            const zOff = lz * ny * nx;
 
-            for (let x = 0; x < mapSize; x++) {
-                const idx = rowOffset + x;
-                const globalX = offsetX + x;
-                const dx = globalX - this.targetX;
-                const distSq = dx * dx + dySq;
-                const dist = Math.sqrt(distSq);
+            for (let y = 0; y < ny; y++) {
+                const globalY = offsetY + y;
+                const dy = globalY - this.targetY;
+                const dySq = dy * dy;
 
-                // Potential for visualization (Face 3)
-                face3_Integration[idx] = dist;
+                for (let x = 0; x < nx; x++) {
+                    const idx = zOff + y * nx + x;
+                    const globalX = offsetX + x;
+                    const dx = globalX - this.targetX;
+                    const distSq = dx * dx + dySq;
+                    const dist = Math.sqrt(distSq);
 
-                // Force Vector pointing directly to target
-                if (dist > 0.1) {
-                    // Perfect radial alignment
-                    face4_ForceX[idx] = -dx / dist;
-                    face5_ForceY[idx] = -dy / dist;
-                } else {
-                    face4_ForceX[idx] = 0;
-                    face5_ForceY[idx] = 0;
+                    // Potential for visualization (Face 3)
+                    face3_Integration[idx] = dist;
+
+                    // Force Vector pointing directly to target
+                    if (dist > 0.1) {
+                        face4_ForceX[idx] = -dx / dist;
+                        face5_ForceY[idx] = -dy / dist;
+                    } else {
+                        face4_ForceX[idx] = 0;
+                        face5_ForceY[idx] = 0;
+                    }
                 }
             }
         }

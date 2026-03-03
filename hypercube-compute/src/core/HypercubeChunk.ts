@@ -3,7 +3,9 @@ import type { IHypercubeEngine } from '../engines/IHypercubeEngine';
 import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
 
 export class HypercubeChunk {
-    public readonly mapSize: number;
+    public readonly nx: number;
+    public readonly ny: number;
+    public readonly nz: number;
     public readonly faces: Float32Array[] = [];
     public gpuBuffer: GPUBuffer | null = null; // Un seul buffer contigu pour le GPU (V3 GodMode)
     public readonly offset: number;
@@ -11,18 +13,23 @@ export class HypercubeChunk {
     public engine: IHypercubeEngine | null = null;
     public readonly x: number;
     public readonly y: number;
+    public readonly z: number;
     private masterBuffer: HypercubeMasterBuffer;
 
-    constructor(x: number, y: number, mapSize: number, masterBuffer: HypercubeMasterBuffer, numFaces: number = 6) {
+    constructor(x: number, y: number, nx: number, ny: number, nz: number = 1, masterBuffer: HypercubeMasterBuffer, numFaces: number = 6, z: number = 0) {
         this.x = x;
         this.y = y;
+        this.z = z;
         this.masterBuffer = masterBuffer;
-        this.mapSize = mapSize;
-        const allocation = masterBuffer.allocateCube(mapSize, numFaces);
+        this.nx = nx;
+        this.ny = ny;
+        this.nz = nz;
+
+        const allocation = masterBuffer.allocateCube(nx, ny, nz, numFaces);
         this.offset = allocation.offset;
         this.stride = allocation.stride;
 
-        const floatCount = mapSize * mapSize;
+        const floatCount = nx * ny * nz;
 
         for (let i = 0; i < numFaces; i++) {
             this.faces.push(
@@ -33,6 +40,23 @@ export class HypercubeChunk {
                 )
             );
         }
+    }
+
+    /**
+     * Retourne l'index linéaire pour une position (x, y, z) locale au chunk.
+     */
+    public getIndex(lx: number, ly: number, lz: number = 0): number {
+        return (lz * this.ny * this.nx) + (ly * this.nx) + lx;
+    }
+
+    /**
+     * Extrait une tranche 2D (Slice Z) d'une face spécifique.
+     * @returns Un Float32Array (copie) représentant la couche demandée.
+     */
+    public getSlice(faceIndex: number, lz: number): Float32Array {
+        const sliceSize = this.nx * this.ny;
+        const offset = lz * sliceSize;
+        return this.faces[faceIndex].slice(offset, offset + sliceSize);
     }
 
     setEngine(engine: IHypercubeEngine) {
@@ -64,13 +88,13 @@ export class HypercubeChunk {
 
         // Informer le moteur mathématique
         if (this.engine.initGPU) {
-            this.engine.initGPU(HypercubeGPUContext.device, this.gpuBuffer, this.stride, this.mapSize);
+            this.engine.initGPU(HypercubeGPUContext.device, this.gpuBuffer, this.stride, this.nx, this.ny, this.nz);
         }
     }
 
     async compute() {
         if (!this.engine) return;
-        await this.engine.compute(this.faces, this.mapSize, this.x, this.y);
+        await (this.engine.compute as any)(this.faces, this.nx, this.ny, this.nz, this.x, this.y, this.z);
     }
 
     /** Helper pour vider une face spécifique */
