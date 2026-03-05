@@ -1,6 +1,7 @@
 import { HypercubeMasterBuffer } from './HypercubeMasterBuffer';
 import type { IHypercubeEngine } from '../engines/IHypercubeEngine';
 import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
+import { HypercubeGpuResource } from './gpu/HypercubeGpuResource';
 
 export class HypercubeChunk {
     public readonly nx: number;
@@ -8,10 +9,12 @@ export class HypercubeChunk {
     public readonly nz: number;
     public readonly faces: Float32Array[] = [];
 
-    // ── GPU REFACTO V5.4 ── Double Buffering propre
-    public gpuReadBuffer: GPUBuffer | null = null;   // Buffer actuellement lu par le renderer + prochain compute
-    public gpuWriteBuffer: GPUBuffer | null = null;  // Buffer dans lequel le compute écrit
-    public gpuParity: number = 0;                    // 0 = read, 1 = write
+    // ── GPU REFACTO V5.4 ── Architecture déléguee
+    public gpuResource: HypercubeGpuResource | null = null;
+
+    public get gpuReadBuffer(): GPUBuffer | null { return this.gpuResource?.readBuffer ?? null; }
+    public get gpuWriteBuffer(): GPUBuffer | null { return this.gpuResource?.writeBuffer ?? null; }
+    public get gpuParity(): number { return this.gpuResource?.parity ?? 0; }
 
     /** @deprecated Use gpuReadBuffer instead */
     public get gpuBuffer(): GPUBuffer | null {
@@ -25,9 +28,6 @@ export class HypercubeChunk {
     public readonly y: number;
     public readonly z: number;
     private masterBuffer: HypercubeMasterBuffer;
-
-    // ── GPU REFACTO V5.4 ── Staging buffer partagé (un seul par chunk, réutilisé)
-    private stagingBuffer: GPUBuffer | null = null;
 
     constructor(
         x: number, y: number, nx: number, ny: number, nz: number = 1,
@@ -67,40 +67,27 @@ export class HypercubeChunk {
         this.engine = engine;
     }
 
-    // ── GPU REFACTO V5.4 ──
     initGPU() {
         if (!this.engine) return;
 
         const totalSize = this.faces.length * this.stride;
+        this.gpuResource = new HypercubeGpuResource(totalSize, `Chunk ${this.x},${this.y}`);
+        this.gpuResource.init();
+
         const device = HypercubeGPUContext.device;
-
-        this.gpuReadBuffer = HypercubeGPUContext.createStorageBuffer(totalSize);
-        this.gpuWriteBuffer = HypercubeGPUContext.createStorageBuffer(totalSize);
-
-        // Upload initial des données CPU vers les deux buffers
-        device.queue.writeBuffer(this.gpuReadBuffer, 0, this.masterBuffer.buffer, this.offset, totalSize);
-        device.queue.writeBuffer(this.gpuWriteBuffer, 0, this.masterBuffer.buffer, this.offset, totalSize);
+        // Upload initial
+        device.queue.writeBuffer(this.gpuReadBuffer!, 0, this.masterBuffer.buffer, this.offset, totalSize);
+        device.queue.writeBuffer(this.gpuWriteBuffer!, 0, this.masterBuffer.buffer, this.offset, totalSize);
 
         if (this.engine.initGPU) {
-            this.engine.initGPU(
-                device,
-                this.gpuReadBuffer,
-                this.gpuWriteBuffer,
-                this.stride,
-                this.nx, this.ny, this.nz
-            );
+            this.engine.initGPU(device, this.gpuReadBuffer!, this.gpuWriteBuffer!, this.stride, this.nx, this.ny, this.nz);
         }
     }
 
-    // ── GPU REFACTO V5.4 ──
     swapGPUBuffers() {
-        if (this.gpuReadBuffer && this.gpuWriteBuffer) {
-            [this.gpuReadBuffer, this.gpuWriteBuffer] = [this.gpuWriteBuffer, this.gpuReadBuffer];
-            this.gpuParity = 1 - this.gpuParity;
-        }
+        this.gpuResource?.swap();
     }
 
-    /** Méthode CPU – inchangée */
     async compute() {
         if (!this.engine) return;
         await (this.engine.compute as any)(this.faces, this.nx, this.ny, this.nz, this.x, this.y, this.z);
@@ -110,77 +97,62 @@ export class HypercubeChunk {
         this.faces[faceIndex].fill(0);
     }
 
-    // ── GPU REFACTO V5.4 ── Lecture asynchrone non-bloquante
     async syncToHost(faceIndices?: number[], block: boolean = false): Promise<void> {
-        if (!this.gpuReadBuffer) return;
+        if (!this.gpuResource || !this.gpuResource.readBuffer) return;
 
-        const device = HypercubeGPUContext.device;
+        const res = this.gpuResource;
         const totalSize = this.faces.length * this.stride;
+        const device = HypercubeGPUContext.device;
 
-        if (!this.stagingBuffer) {
-            this.stagingBuffer = device.createBuffer({
-                size: totalSize,
-                usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-                label: `Staging Buffer Chunk ${this.x},${this.y}`
-            });
-        }
+        const readBuffer = res.readBuffer;
+        const staging = res.stagingBuffer;
+        if (!readBuffer || !staging || staging.mapState !== 'unmapped') return;
 
         const encoder = device.createCommandEncoder();
-        encoder.copyBufferToBuffer(this.gpuReadBuffer, 0, this.stagingBuffer, 0, totalSize);
+        encoder.copyBufferToBuffer(readBuffer, 0, staging, 0, totalSize);
         device.queue.submit([encoder.finish()]);
 
         if (block) {
-            await this.stagingBuffer.mapAsync(GPUMapMode.READ);
-            const mapped = this.stagingBuffer.getMappedRange();
-            new Uint8Array(this.masterBuffer.buffer, this.offset, totalSize)
-                .set(new Uint8Array(mapped));
-            this.stagingBuffer.unmap();
+            await staging.mapAsync(GPUMapMode.READ);
+            this.applyMappedRange(staging, totalSize);
         } else {
-            // ── GPU REFACTO V5.4 ── Mapping asynchrone (Non-Bloquant)
-            // On ne tente le mapping que si le buffer est libre (évite les erreurs d'overlap)
-            if (this.stagingBuffer.mapState === 'unmapped') {
-                this.stagingBuffer.mapAsync(GPUMapMode.READ).then(() => {
-                    if (this.stagingBuffer && this.stagingBuffer.mapState === 'mapped') {
-                        const mapped = this.stagingBuffer.getMappedRange();
-                        new Uint8Array(this.masterBuffer.buffer, this.offset, totalSize)
-                            .set(new Uint8Array(mapped));
-                        this.stagingBuffer.unmap();
-                    }
-                }).catch(() => { /* On ignore les échecs de lecture différée */ });
-            }
+            staging.mapAsync(GPUMapMode.READ).then(() => {
+                if (staging && staging.mapState === 'mapped') {
+                    this.applyMappedRange(staging, totalSize);
+                }
+            }).catch(() => { });
         }
     }
 
-    // ── GPU REFACTO V5.4 ──
+    private applyMappedRange(staging: GPUBuffer, size: number) {
+        const mapped = staging.getMappedRange();
+        new Uint8Array(this.masterBuffer.buffer, this.offset, size).set(new Uint8Array(mapped));
+        staging.unmap();
+    }
+
     syncFromHost(faceIndices?: number[]) {
         if (!this.gpuReadBuffer) return;
         const device = HypercubeGPUContext.device;
         const totalSize = this.faces.length * this.stride;
 
-        if (!faceIndices || faceIndices.length === 0) {
-            device.queue.writeBuffer(this.gpuReadBuffer, 0, this.masterBuffer.buffer, this.offset, totalSize);
-            if (this.gpuWriteBuffer) {
-                device.queue.writeBuffer(this.gpuWriteBuffer, 0, this.masterBuffer.buffer, this.offset, totalSize);
-            }
-        } else {
-            for (const idx of faceIndices) {
-                const offset = idx * this.stride;
-                device.queue.writeBuffer(this.gpuReadBuffer, offset, this.masterBuffer.buffer, this.offset + offset, this.stride);
-                if (this.gpuWriteBuffer) {
-                    device.queue.writeBuffer(this.gpuWriteBuffer, offset, this.masterBuffer.buffer, this.offset + offset, this.stride);
+        const doWrite = (buf: GPUBuffer) => {
+            if (!faceIndices || faceIndices.length === 0) {
+                device.queue.writeBuffer(buf, 0, this.masterBuffer.buffer, this.offset, totalSize);
+            } else {
+                for (const idx of faceIndices) {
+                    const offset = idx * this.stride;
+                    device.queue.writeBuffer(buf, offset, this.masterBuffer.buffer, this.offset + offset, this.stride);
                 }
             }
-        }
+        };
+
+        doWrite(this.gpuReadBuffer);
+        if (this.gpuWriteBuffer) doWrite(this.gpuWriteBuffer);
     }
 
-    // ── GPU REFACTO V5.4 ── Nettoyage propre
     destroy() {
-        this.gpuReadBuffer?.destroy();
-        this.gpuWriteBuffer?.destroy();
-        this.stagingBuffer?.destroy();
-
-        this.gpuReadBuffer = null;
-        this.gpuWriteBuffer = null;
-        this.stagingBuffer = null;
+        this.gpuResource?.destroy();
+        this.gpuResource = null;
     }
 }
+

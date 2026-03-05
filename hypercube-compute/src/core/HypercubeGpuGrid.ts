@@ -17,11 +17,15 @@ export class HypercubeGpuGrid {
     public masterBuffer: HypercubeMasterBuffer;
 
     public stats = {
-        computeTimeMs: 0,
-        syncTimeMs: 0
+        computeTimeMs: 0,    // Total JS orchestration time
+        gpuWorkMs: 0,       // Time spent encoding compute commands
+        syncTimeMs: 0,      // Time spent encoding boundary copies
+        dispatchCount: 0,   // Number of dispatches (LBM + Bio)
+        copyCount: 0        // Number of VRAM-to-VRAM copies
     };
 
     public isPeriodic: boolean = true;
+    private frameCounter: number = 0;
 
     constructor(
         cols: number,
@@ -90,7 +94,11 @@ export class HypercubeGpuGrid {
         const device = HypercubeGPUContext.device;
         const encoder = device.createCommandEncoder({ label: 'Hypercube Full GPU Pass' });
 
+        this.stats.dispatchCount = 0;
+        this.stats.copyCount = 0;
+
         // 1. Compute local sur tous les chunks
+        const computeStart = performance.now();
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 const cube = this.cubes[y][x];
@@ -104,14 +112,18 @@ export class HypercubeGpuGrid {
                         cube.gpuReadBuffer!,
                         cube.gpuWriteBuffer!
                     );
+                    this.stats.dispatchCount += 2; // LBM + Bio
                 }
             }
         }
+        this.stats.gpuWorkMs = performance.now() - computeStart;
 
         // 2. Synchronisation des frontières directement en VRAM
+        const syncStart = performance.now();
         if (this.cols > 1 || this.rows > 1) {
             this.synchronizeBoundariesGPU(encoder);
         }
+        this.stats.syncTimeMs = performance.now() - syncStart;
 
         // 3. Soumission de tout le travail GPU en une seule queue
         device.queue.submit([encoder.finish()]);
@@ -131,6 +143,11 @@ export class HypercubeGpuGrid {
         }
 
         this.stats.computeTimeMs = performance.now() - start;
+
+        this.frameCounter++;
+        if (this.frameCounter % 100 === 0) {
+            console.log(`[HypercubeGpuGrid] Frame ${this.frameCounter} | Compute: ${this.stats.computeTimeMs.toFixed(2)}ms | Dispatch: ${this.stats.dispatchCount} | Copy: ${this.stats.copyCount}`);
+        }
     }
 
     // ── GPU REFACTO V5.4 ── Boundary Exchange 100% GPU
@@ -148,25 +165,25 @@ export class HypercubeGpuGrid {
                 if (this.isPeriodic || x < this.cols - 1) {
                     const right = this.cubes[y][(x + 1) % this.cols]!;
                     for (const f of facesToSync) {
-                        HypercubeGPUContext.gpuCopyBoundary(
+                        this.stats.copyCount += HypercubeGPUContext.gpuCopyBoundary(
                             encoder,
                             cube.gpuWriteBuffer,
                             right.gpuWriteBuffer!,
-                            fOffset(f) + (cube.nx - 2) * 4,   // dernier float valide
-                            fOffset(f) + 0,                    // premier float du voisin
-                            4,                                 // 1 float
-                            cube.ny - 2,                       // nombre de lignes
-                            cube.nx * 4,                       // stride source
-                            cube.nx * 4                        // stride dest
+                            fOffset(f) + (cube.nx - 2) * 4,
+                            fOffset(f) + 0,
+                            4,
+                            cube.ny - 2,
+                            cube.nx * 4,
+                            cube.nx * 4
                         );
                     }
                 }
 
-                // Bottom neighbor (similaire)
+                // Bottom neighbor
                 if (this.isPeriodic || y < this.rows - 1) {
                     const bottom = this.cubes[(y + 1) % this.rows][x]!;
                     for (const f of facesToSync) {
-                        HypercubeGPUContext.gpuCopyBoundary(
+                        this.stats.copyCount += HypercubeGPUContext.gpuCopyBoundary(
                             encoder,
                             cube.gpuWriteBuffer,
                             bottom.gpuWriteBuffer!,

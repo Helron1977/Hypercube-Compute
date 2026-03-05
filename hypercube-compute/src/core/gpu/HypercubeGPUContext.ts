@@ -95,9 +95,10 @@ export class HypercubeGPUContext {
         rowCount: number = 1,
         srcStride: number = 0,
         dstStride: number = 0
-    ) {
+    ): number {
         if (rowCount <= 1) {
             encoder.copyBufferToBuffer(srcBuffer, srcByteOffset, dstBuffer, dstByteOffset, byteSize);
+            return 1;
         } else {
             for (let i = 0; i < rowCount; i++) {
                 encoder.copyBufferToBuffer(
@@ -108,6 +109,7 @@ export class HypercubeGPUContext {
                     byteSize
                 );
             }
+            return rowCount;
         }
     }
 
