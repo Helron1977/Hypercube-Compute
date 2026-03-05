@@ -94,6 +94,7 @@ export class HypercubeGpuGrid {
         const device = HypercubeGPUContext.device;
         const encoder = device.createCommandEncoder({ label: 'Hypercube Full GPU Pass' });
 
+        // Reset stats for the current frame
         this.stats.dispatchCount = 0;
         this.stats.copyCount = 0;
 
@@ -145,8 +146,8 @@ export class HypercubeGpuGrid {
         this.stats.computeTimeMs = performance.now() - start;
 
         this.frameCounter++;
-        if (this.frameCounter % 100 === 0) {
-            console.log(`[HypercubeGpuGrid] Frame ${this.frameCounter} | Compute: ${this.stats.computeTimeMs.toFixed(2)}ms | Dispatch: ${this.stats.dispatchCount} | Copy: ${this.stats.copyCount}`);
+        if (this.frameCounter % 60 === 0) {
+            console.log(`%c[Robinet GPU] Frame ${this.frameCounter} | Total: ${this.stats.computeTimeMs.toFixed(2)}ms | Sync: ${this.stats.syncTimeMs.toFixed(2)}ms | Kernels: ${this.stats.dispatchCount} | VRAM Copies: ${this.stats.copyCount}`, "color: #00ff00; font-weight: bold;");
         }
     }
 

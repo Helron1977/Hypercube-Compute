@@ -102,22 +102,17 @@ const heatmap = grid.cubes[0][0].faces[2]; // Float32Array ready for rendering!
 ### 🌊 OceanEngine – Shallow Water + Plankton Dynamics (D2Q9 LBM)
 Simulation océanique simplifiée : courants, tourbillons, forcing interactif (vortex souris), + croissance/diffusion plancton.
 
+**Version V5.4 "Zero-Stall"** :
+- **Optimisation GPU** : Passage intégral en WGSL avec gestion de barrières mémoire.
+- **Synchronisation VRAM-to-VRAM** : Les échanges de frontières entre chunks se font directement sur le GPU (`copyBufferToBuffer`), éliminant tout readback CPU pendant la simulation.
+- **Masse Conservée** : Algorithme validé sur grilles multi-chunks avec conservation parfaite à < 0.1%.
+
 **Faces clés**  
-- **0–8**   : f (populations LBM)  
-- **9–17**  : f_post (post-collision temp)  
+- **0–8**   : f (populations LBM - Entrée/Sortie alternées via Parité)  
 - **18**    : ux (courant X) 
 - **19**    : uy (courant Y) 
 - **20**    : rho (densité/masse)  
-- **21**    : bio (plancton/concentration spatiale)  
 - **22**    : obst (îles/murs fixes à 1.0)
-
-**Interaction & Paramètres**  
-`tau_0` (relaxation globale), `smagorinsky` (bruit turbulent), `vortexRadius/Strength` pour paramétrer un tourbillon injecté à la position de la souris !
-
-**Multi-chunk LBM validé**  
-OceanEngine conserve une masse parfaite (perte < 0.1 % sur 2000+ steps) même sur une grille 2×2 (ou plus).  
-Il suffit d’appeler `grid.compute()` (le composant se chargeant automatiquement de synchroniser les faces 0 à 8 aux interfaces).  
-→ Preuve que l’architecture zero-copy + boundary exchange est robuste pour solvers distribués.
 
 ### ☁️ Simplified Fluid Dynamics (V3)
 A lightweight Eulerian fluid simulator using pure Advection and Bilinear Sampling. Designed to simulate smoke, gases, and empirical thermal buoyancy directly via WebGPU float32 arrays.
@@ -271,15 +266,18 @@ canvas.onmousemove = (e) => {
 
 ---
 
-## ⚙️ Hardware Acceleration (WebGPU)
+### 🚀 Hardware Acceleration (WebGPU V5.4)
 
-Hypercube auto-detects support, but for maximum perf:
+Hypercube auto-détecte le support, mais pour un maximum de performance :
 
-### 🚀 Activate WebGPU
+**Pipeline "Zero-Stall"** :
+- Les données restent en VRAM pendant toute la durée de la boucle `compute()`.
+- **Instrumentation "Robinet"** : Visualisation en temps réel du coût des kernels et des copies VRAM via la console.
+
 ```ts
-await HypercubeGPUContext.init(); // MUST call this first
+await HypercubeGPUContext.init(); // Indispensable avant de créer la grille
 const grid = await HypercubeGrid.create(..., 'gpu'); 
-console.log(grid.isGpuReady); // Fallback to 'cpu' if hardware is unsupported
+console.log(grid.isGpuReady); // Fallback automatique en 'cpu' si non supporté
 ```
 
 ### � Multi-threading (SharedArrayBuffer)

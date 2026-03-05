@@ -54,7 +54,13 @@ fn compute_lbm(@builtin(global_invocation_id) id: vec3<u32>) {
 
     var r = 0.0;
     for (var k = 0u; k < 9u; k = k + 1u) { r += pf[k]; }
-    if (r < 0.1 || r > 10.0) { r = 1.0; }
+    
+    var pf_temp = pf; // Utiliser une copie pour la remise à zéro si nécessaire
+    if (r < 0.1 || r > 10.0) { 
+        r = 1.0; 
+        for (var k = 0u; k < 9u; k = k + 1u) { pf_temp[k] = w[k]; }
+    }
+    pf = pf_temp;
 
     var vx = (pf[1] + pf[5] + pf[8] - (pf[3] + pf[6] + pf[7])) / (r + 1e-6);
     var vy = (pf[2] + pf[5] + pf[6] - (pf[4] + pf[7] + pf[8])) / (r + 1e-6);

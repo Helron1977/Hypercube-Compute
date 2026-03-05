@@ -2,6 +2,7 @@ import { HypercubeMasterBuffer } from './HypercubeMasterBuffer';
 import { HypercubeChunk } from './HypercubeChunk';
 import type { IHypercubeEngine } from '../engines/IHypercubeEngine';
 import { HypercubeWorkerPool } from './cpu/HypercubeWorkerPool';
+import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
 import { BoundaryConditions, BoundaryConfig, BoundaryType } from './cpu/BoundaryConditions';
 
 /**
@@ -24,8 +25,13 @@ export class HypercubeCpuGrid {
     public stats = {
         computeTimeMs: 0,
         syncTimeMs: 0,
-        frameCount: 0
+        frameCount: 0,
+        gpuWorkMs: 0,
+        dispatchCount: 0,
+        copyCount: 0
     };
+
+    private frameCounter: number = 0;
 
     private _engineFactory: () => IHypercubeEngine;
     private workerPool: HypercubeWorkerPool | null = null;
@@ -141,10 +147,12 @@ export class HypercubeCpuGrid {
         }
 
         if (this.mode === 'gpu') {
-            const { HypercubeGPUContext } = await import('./gpu/HypercubeGPUContext');
             const device = HypercubeGPUContext.device;
-            const commandEncoder = device.createCommandEncoder();
+            const commandEncoder = device.createCommandEncoder({ label: 'Hypercube GPU Pass (CpuGrid)' });
             const flatCubes = this.cubes.flat().filter(c => c !== null) as HypercubeChunk[];
+
+            this.stats.dispatchCount = 0;
+            this.stats.copyCount = 0;
 
             // 1. Dispatch GPU Compute (Zero-Stall)
             for (const cube of flatCubes) {
@@ -158,26 +166,37 @@ export class HypercubeCpuGrid {
                         cube.gpuReadBuffer!,
                         cube.gpuWriteBuffer!
                     );
+                    this.stats.dispatchCount += 2; // LBM + Bio
                 }
             }
 
             // 2. Synchronize Boundaries directly in VRAM (Zero-Readback)
             if (this.cols > 1 || this.rows > 1) {
+                const syncStart = performance.now();
                 const headEngine = flatCubes[0]?.engine;
                 const syncFaces = headEngine?.getSyncFaces ? headEngine.getSyncFaces() : [0];
                 for (const f of syncFaces) {
-                    this.synchronizeBoundariesGPU(commandEncoder, f);
+                    this.stats.copyCount += this.synchronizeBoundariesGPU(commandEncoder, f);
                 }
+                this.stats.syncTimeMs = performance.now() - syncStart;
             }
 
             device.queue.submit([commandEncoder.finish()]);
 
-            // 3. Swap buffers locally
+            // 3. Swap buffers locally et sync parité moteur
             for (const cube of flatCubes) {
                 cube.swapGPUBuffers();
+                if (cube.engine && 'parity' in cube.engine) {
+                    (cube.engine as any).parity = cube.gpuParity;
+                }
             }
 
             this.stats.computeTimeMs = performance.now() - computeStart;
+
+            this.frameCounter++;
+            if (this.frameCounter % 60 === 0) {
+                console.log(`%c[Robinet GPU] Frame ${this.frameCounter} | Total: ${this.stats.computeTimeMs.toFixed(2)}ms | Sync: ${this.stats.syncTimeMs.toFixed(2)}ms | Kernels: ${this.stats.dispatchCount} | VRAM Copies: ${this.stats.copyCount}`, "color: #00ff00; font-weight: bold;");
+            }
         } else if (this.workerPool && this.masterBuffer.buffer instanceof SharedArrayBuffer) {
             const flatCubes = this.cubes.flat().filter(c => c !== null) as HypercubeChunk[];
             const engineName = flatCubes[0]?.engine?.name || 'Unknown';
@@ -232,11 +251,14 @@ export class HypercubeCpuGrid {
 
         // --- GLOBAL PARITY TOGGLE ---
         // Must happen AFTER all compute and sync steps
-        for (let y = 0; y < this.rows; y++) {
-            for (let x = 0; x < this.cols; x++) {
-                const cube = this.cubes[y][x];
-                if (cube?.engine && (cube.engine as any).parity !== undefined) {
-                    (cube.engine as any).parity = 1 - (cube.engine as any).parity;
+        // ── GPU REFACTO V5.4 ── Skip if GPU (already handled above)
+        if (this.mode !== 'gpu') {
+            for (let y = 0; y < this.rows; y++) {
+                for (let x = 0; x < this.cols; x++) {
+                    const cube = this.cubes[y][x];
+                    if (cube?.engine && (cube.engine as any).parity !== undefined) {
+                        (cube.engine as any).parity = 1 - (cube.engine as any).parity;
+                    }
                 }
             }
         }
@@ -255,31 +277,36 @@ export class HypercubeCpuGrid {
      * GPU-to-GPU Boundary Exchange using copyBufferToBuffer.
      * Operates directly in VRAM without CPU readbacks.
      */
-    private synchronizeBoundariesGPU(encoder: GPUCommandEncoder, f: number) {
+    private synchronizeBoundariesGPU(encoder: GPUCommandEncoder, f: number): number {
         const nx = this.nx;
         const ny = this.ny;
         const nz = this.nz;
-        const stride = this.cubes[0][0]!.stride; // ── GPU REFACTO V5.4 ── Utilisation du stride réel avec padding
+        const stride = this.cubes[0][0]!.stride;
         const rowSize = nx * 4;
         const innerRowSize = (nx - 2) * 4;
         const faceOffset = f * stride;
+        let copies = 0;
 
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 const cube = this.cubes[y][x]!;
-                const readBuf = cube.gpuWriteBuffer!; // We sync the outputs of the just-finished compute
+                const readBuf = cube.gpuWriteBuffer!;
 
-                // 1. X-Axis (Left/Right) - Non-contiguous, must copy per-row
+                // 1. X-Axis (Left/Right)
                 if (x < this.cols - 1 || this.isPeriodic) {
                     const rightCube = this.cubes[y][(x + 1) % this.cols]!;
                     const dstBuf = rightCube.gpuWriteBuffer!;
                     for (let lz = 0; lz < nz; lz++) {
                         const zOff = lz * ny * nx * 4;
-                        for (let ly = 1; ly < ny - 1; ly++) {
-                            const srcOff = faceOffset + zOff + ly * rowSize + (nx - 2) * 4;
-                            const dstOff = faceOffset + zOff + ly * rowSize;
-                            encoder.copyBufferToBuffer(readBuf, srcOff, dstBuf, dstOff, 4);
-                        }
+                        copies += HypercubeGPUContext.gpuCopyBoundary(
+                            encoder, readBuf, dstBuf,
+                            faceOffset + zOff + 1 * nx * 4 + (nx - 2) * 4,
+                            faceOffset + zOff + 1 * nx * 4,
+                            4,
+                            ny - 2,
+                            nx * 4,
+                            nx * 4
+                        );
                     }
                 }
 
@@ -288,23 +315,30 @@ export class HypercubeCpuGrid {
                     const dstBuf = leftCube.gpuWriteBuffer!;
                     for (let lz = 0; lz < nz; lz++) {
                         const zOff = lz * ny * nx * 4;
-                        for (let ly = 1; ly < ny - 1; ly++) {
-                            const srcOff = faceOffset + zOff + ly * rowSize + 1 * 4;
-                            const dstOff = faceOffset + zOff + ly * rowSize + (nx - 1) * 4;
-                            encoder.copyBufferToBuffer(readBuf, srcOff, dstBuf, dstOff, 4);
-                        }
+                        copies += HypercubeGPUContext.gpuCopyBoundary(
+                            encoder, readBuf, dstBuf,
+                            faceOffset + zOff + 1 * nx * 4 + 4,
+                            faceOffset + zOff + 1 * nx * 4 + (nx - 1) * 4,
+                            4,
+                            ny - 2,
+                            nx * 4,
+                            nx * 4
+                        );
                     }
                 }
 
-                // 2. Y-Axis (Top/Bottom) - Contiguous rows, can copy in batch
+                // 2. Y-Axis (Top/Bottom)
                 if (y < this.rows - 1 || this.isPeriodic) {
                     const botCube = this.cubes[(y + 1) % this.rows][x]!;
                     const dstBuf = botCube.gpuWriteBuffer!;
                     for (let lz = 0; lz < nz; lz++) {
                         const zOff = lz * ny * nx * 4;
-                        const srcOff = faceOffset + zOff + (ny - 2) * rowSize + 4;
-                        const dstOff = faceOffset + zOff + 4;
-                        encoder.copyBufferToBuffer(readBuf, srcOff, dstBuf, dstOff, innerRowSize);
+                        copies += HypercubeGPUContext.gpuCopyBoundary(
+                            encoder, readBuf, dstBuf,
+                            faceOffset + zOff + (ny - 2) * rowSize + 4,
+                            faceOffset + zOff + 4,
+                            innerRowSize
+                        );
                     }
                 }
 
@@ -313,9 +347,12 @@ export class HypercubeCpuGrid {
                     const dstBuf = topCube.gpuWriteBuffer!;
                     for (let lz = 0; lz < nz; lz++) {
                         const zOff = lz * ny * nx * 4;
-                        const srcOff = faceOffset + zOff + rowSize + 4;
-                        const dstOff = faceOffset + zOff + (ny - 1) * rowSize + 4;
-                        encoder.copyBufferToBuffer(readBuf, srcOff, dstBuf, dstOff, innerRowSize);
+                        copies += HypercubeGPUContext.gpuCopyBoundary(
+                            encoder, readBuf, dstBuf,
+                            faceOffset + zOff + rowSize + 4,
+                            faceOffset + zOff + (ny - 1) * rowSize + 4,
+                            innerRowSize
+                        );
                     }
                 }
 
@@ -332,29 +369,34 @@ export class HypercubeCpuGrid {
 
                 for (let lz = 0; lz < nz; lz++) {
                     const zOff = lz * ny * nx * 4;
-                    // Bottom-Right
+                    // Bottom-Right -> Neighbor's Top-Left Ghost
                     if (hasBot && hasRight) {
                         const target = this.cubes[bIdx][rIdx]!.gpuWriteBuffer!;
                         encoder.copyBufferToBuffer(readBuf, faceOffset + zOff + (ny - 2) * rowSize + (nx - 2) * 4, target, faceOffset + zOff, 4);
+                        copies++;
                     }
-                    // Bottom-Left
+                    // Bottom-Left -> Neighbor's Top-Right Ghost
                     if (hasBot && hasLeft) {
                         const target = this.cubes[bIdx][lIdx]!.gpuWriteBuffer!;
                         encoder.copyBufferToBuffer(readBuf, faceOffset + zOff + (ny - 2) * rowSize + 4, target, faceOffset + zOff + (nx - 1) * 4, 4);
+                        copies++;
                     }
-                    // Top-Right
+                    // Top-Right -> Neighbor's Bottom-Left Ghost
                     if (hasTop && hasRight) {
                         const target = this.cubes[tIdx][rIdx]!.gpuWriteBuffer!;
                         encoder.copyBufferToBuffer(readBuf, faceOffset + zOff + rowSize + (nx - 2) * 4, target, faceOffset + zOff + (ny - 1) * rowSize, 4);
+                        copies++;
                     }
-                    // Top-Left
+                    // Top-Left -> Neighbor's Bottom-Right Ghost
                     if (hasTop && hasLeft) {
                         const target = this.cubes[tIdx][lIdx]!.gpuWriteBuffer!;
                         encoder.copyBufferToBuffer(readBuf, faceOffset + zOff + rowSize + 4, target, faceOffset + zOff + (ny - 1) * rowSize + (nx - 1) * 4, 4);
+                        copies++;
                     }
                 }
             }
         }
+        return copies;
     }
 
     private synchronizeBoundaries(f: number) {
