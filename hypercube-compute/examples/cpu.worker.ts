@@ -1,7 +1,6 @@
-import type { HypercubeMasterBuffer } from '../HypercubeMasterBuffer';
-import { HypercubeChunk } from '../HypercubeChunk';
-import type { IHypercubeEngine } from '../../engines/IHypercubeEngine';
-import { EngineRegistry } from '../EngineRegistry';
+import { HypercubeChunk } from '../src/core/HypercubeChunk';
+import type { IHypercubeEngine } from '../src/engines/IHypercubeEngine';
+import { EngineRegistry } from '../src/core/EngineRegistry';
 
 /**
  * Script de base exécuté par les instances Web Worker de la HypercubeWorkerPool.

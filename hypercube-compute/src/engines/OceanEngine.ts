@@ -73,6 +73,16 @@ export class OceanEngine implements IHypercubeEngine {
         };
     }
 
+    public getEquilibrium(rho: number, ux: number, uy: number): Float32Array {
+        const res = new Float32Array(9);
+        const u2 = ux * ux + uy * uy;
+        for (let k = 0; k < 9; k++) {
+            const cu = 3 * (this.cx[k] * ux + this.cy[k] * uy);
+            res[k] = this.w[k] * rho * (1 + cu + 0.5 * cu * cu - 1.5 * u2);
+        }
+        return res;
+    }
+
     public init(faces: Float32Array[], nx: number, ny: number, nz: number, isWorker: boolean = false): void {
         if (isWorker) return; // Main thread already initialized SAB
 

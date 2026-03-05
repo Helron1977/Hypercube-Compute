@@ -35,43 +35,55 @@ export class HypercubeIsoRenderer {
         const { densityFaceIndex: dfi, obstacleFaceIndex: ofi } = options;
         const scale = this.scale;
 
-        // Isometric offsets
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2 + (ny * rows * scale * 0.2);
+        // Isometric constants
+        const isoXScale = scale * 0.866;
+        const isoYScale = scale * 0.5;
 
-        // For each chunk
+        // UTILE (sans ghost cells)
+        const vNX = nx - 2;
+        const vNY = ny - 2;
+
+        // On calcule le décalage pour que (Center World) == (Center Screen)
+        // Le centre du monde en pixels est à (TotalW/2, TotalH/2)
+        const midW = (vNX * cols) / 2;
+        const midH = (vNY * rows) / 2;
+
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2 + (midH * isoYScale * 0.5);
+
         for (let gy = 0; gy < rows; gy++) {
             for (let gx = 0; gx < cols; gx++) {
                 const faces = gridFaces[gy][gx];
                 const density = faces[dfi];
                 const obs = ofi !== undefined ? faces[ofi] : null;
 
-                // Base offset for this chunk in isometric space
-                // Grid (gx, gy) -> Iso (X, Y)
-                const chunkIsoX = (gx - gy) * (nx * scale * 0.866);
-                const chunkIsoY = (gx + gy) * (nx * scale * 0.5);
-
-                for (let ly = 0; ly < ny; ly += 2) { // Subsampled for speed
-                    for (let lx = 0; lx < nx; lx += 2) {
+                for (let ly = 1; ly < ny - 1; ly += 2) {
+                    for (let lx = 1; lx < nx - 1; lx += 2) {
                         const idx = ly * nx + lx;
                         const val = density[idx];
                         const isObs = obs ? obs[idx] > 0.5 : false;
 
-                        if (val < 0.05 && !isObs) continue;
+                        if (val < 0.01 && !isObs) continue;
 
-                        // Screen Position
-                        const x = centerX + chunkIsoX + (lx - ly) * (scale * 0.866);
-                        const y = centerY + chunkIsoY + (lx + ly) * (scale * 0.5);
+                        // Coordonnées GLOBALES relatives au centre du monde
+                        const worldX = (gx * vNX + (lx - 1)) - midW;
+                        const worldY = (gy * vNY + (ly - 1)) - midH;
 
-                        // Pseudo-3D Height based on density
-                        const h = isObs ? scale * 10 : val * scale * 5;
+                        // Projection
+                        const x = centerX + (worldX - worldY) * isoXScale;
+                        const y = centerY + (worldX + worldY) * isoYScale;
+
+                        const h = isObs ? scale * 10 : val * scale * 25; // Boost ondes
 
                         if (isObs) {
                             this.ctx.fillStyle = '#333';
                         } else {
-                            const b = Math.floor(Math.min(255, val * 100));
-                            const g = Math.floor(Math.min(255, val * 200));
-                            this.ctx.fillStyle = `rgb(0, ${g}, ${200 + b})`;
+                            // Ocean surface contrast (focus on variation around 1.0)
+                            const intensity = (val - 1.0) * 800;
+                            const r = Math.max(0, Math.min(255, 20 + intensity));
+                            const g = Math.max(0, Math.min(255, 100 + intensity));
+                            const b = Math.max(0, Math.min(255, 200 + intensity));
+                            this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
                         }
 
                         this.ctx.fillRect(x, y - h, scale * 2, h || scale);

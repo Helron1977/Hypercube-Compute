@@ -284,6 +284,119 @@ export class HypercubeCpuGrid {
         }
     }
 
+    /**
+     * Resolves global coordinates to a specific chunk and local index.
+     */
+    public getChunkAt(gx: number, gy: number, gz: number = 0): { cube: HypercubeChunk, lx: number, ly: number, lz: number } | null {
+        const vnx = this.nx - 2;
+        const vny = this.ny - 2;
+        const vnz = this.nz > 1 ? this.nz - 2 : 1;
+
+        const cx = Math.floor(gx / vnx);
+        const cy = Math.floor(gy / vny);
+        const cz = this.nz > 1 ? Math.floor(gz / vnz) : 0;
+
+        if (cx < 0 || cx >= this.cols || cy < 0 || cy >= this.rows) return null;
+
+        const cube = this.cubes[cy][cx];
+        if (!cube) return null;
+
+        return {
+            cube,
+            lx: (gx % vnx) + 1,
+            ly: (gy % vny) + 1,
+            lz: this.nz > 1 ? (gz % vnz) + 1 : 0
+        };
+    }
+
+    /**
+     * Sets a value at global (world) coordinates across any chunk.
+     */
+    public setAt(gx: number, gy: number, gz: number, face: number, value: number) {
+        const res = this.getChunkAt(gx, gy, gz);
+        if (res) {
+            const { cube, lx, ly, lz } = res;
+            const idx = lz * cube.ny * cube.nx + ly * cube.nx + lx;
+            cube.faces[face][idx] = value;
+        }
+    }
+
+    /**
+     * Paints a circle (or sphere in 3D) at global coordinates.
+     */
+    public paintCircle(gx: number, gy: number, gz: number, face: number, radius: number, value: number) {
+        const vnx = this.nx - 2;
+        const vny = this.ny - 2;
+
+        // Iterate through all affected chunks
+        const minCX = Math.max(0, Math.floor((gx - radius) / vnx));
+        const maxCX = Math.min(this.cols - 1, Math.floor((gx + radius) / vnx));
+        const minCY = Math.max(0, Math.floor((gy - radius) / vny));
+        const maxCY = Math.min(this.rows - 1, Math.floor((gy + radius) / vny));
+
+        for (let cy = minCY; cy <= maxCY; cy++) {
+            for (let cx = minCX; cx <= maxCX; cx++) {
+                const cube = this.cubes[cy][cx]!;
+                for (let lz = 0; lz < cube.nz; lz++) {
+                    const worldZ = this.nz > 1 ? lz - 1 : 0;
+                    for (let ly = 1; ly < cube.ny - 1; ly++) {
+                        const worldY = cy * vny + (ly - 1);
+                        for (let lx = 1; lx < cube.nx - 1; lx++) {
+                            const worldX = cx * vnx + (lx - 1);
+
+                            const dz = this.nz > 1 ? (worldZ - gz) : 0;
+                            const distSq = (worldX - gx) ** 2 + (worldY - gy) ** 2 + dz ** 2;
+                            if (distSq < radius * radius) {
+                                const idx = lz * cube.ny * cube.nx + ly * cube.nx + lx;
+                                cube.faces[face][idx] = value;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Specialized LBM helper to apply an equilibrium state globally.
+     * Use this for "splashes" or initial conditions in LBM engines.
+     */
+    public applyEquilibrium(gx: number, gy: number, gz: number, radius: number, rho: number, ux: number, uy: number) {
+        const vnx = this.nx - 2;
+        const vny = this.ny - 2;
+
+        for (let cy = 0; cy < this.rows; cy++) {
+            for (let cx = 0; cx < this.cols; cx++) {
+                const cube = this.cubes[cy][cx]!;
+                const engine = cube.engine;
+                if (!engine?.getEquilibrium) continue;
+
+                // Precompute equilibrium
+                const fEq = engine.getEquilibrium(rho, ux, uy);
+
+                for (let ly = 1; ly < cube.ny - 1; ly++) {
+                    const worldY = cy * vny + (ly - 1);
+                    for (let lx = 1; lx < cube.nx - 1; lx++) {
+                        const worldX = cx * vnx + (lx - 1);
+                        const distSq = (worldX - gx) ** 2 + (worldY - gy) ** 2;
+                        if (distSq < radius * radius) {
+                            const idx = ly * cube.nx + lx;
+                            // Apply to fi (0-8) and f_post (9-17)
+                            for (let k = 0; k < 9; k++) {
+                                cube.faces[k][idx] = fEq[k];
+                                cube.faces[k + 9][idx] = fEq[k];
+                            }
+                            // Also set macro rho/u if faces exist
+                            if (cube.faces[22]) cube.faces[22][idx] = rho;
+                            if (cube.faces[19]) cube.faces[19][idx] = ux;
+                            if (cube.faces[20]) cube.faces[20][idx] = uy;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     public destroy() {
         if (this.workerPool) {
             this.workerPool.terminate();

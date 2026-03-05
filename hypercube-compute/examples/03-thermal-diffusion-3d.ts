@@ -4,14 +4,29 @@ import { HeatDiffusionEngine3D } from '../src/engines/HeatDiffusionEngine3D';
 import { CanvasAdapter } from '../src/io/CanvasAdapter';
 import { BenchmarkHUD } from './shared/BenchmarkHUD';
 
-const RESOLUTION = 32;
+const RESOLUTION = 48;
 const ROWS = 2;
 const COLS = 2;
-const NZ = 32; // Z-axis chunks (1 per cube naturally if NZ array is passed)
-// Wait, HypercubeGrid maps 3D internally via the NZ parameter passed on compute/creation.
+const NZ = 32;
 
 async function bootstrap() {
-    // 32x32x32 = 32768 cells per chunk
+    // Add description overlay
+    const desc = document.createElement('div');
+    desc.className = 'showcase-description';
+    desc.innerHTML = `
+        <h2>03: Diffusion Thermique 3D</h2>
+        <p>Simulation de diffusion de chaleur dans un volume 3D (Laplacien 3D). 
+        Le moteur calcule l'état de plus de 200 000 cellules en 3D à chaque frame.</p>
+        <p style="margin-top:10px; font-size: 0.8rem; border-top: 1px solid #333; padding-top:10px;">
+        Affichage d'une tranche 2D (Slice Z) au centre du volume.</p>
+    `;
+    document.body.appendChild(desc);
+
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = './showcase.css';
+    document.head.appendChild(link);
+
     const totalCells = RESOLUTION * RESOLUTION * NZ;
     const engineTemp = new HeatDiffusionEngine3D();
     const numFaces = engineTemp.getRequiredFaces();
@@ -26,37 +41,20 @@ async function bootstrap() {
         numFaces,
         false,
         true, // Multithreading on 
-        '/cpu.worker.ts'
+        new URL('./cpu.worker.ts', import.meta.url).href
     );
 
-    // Initial Heat Drop in the center of the 3D volume
-    for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-            const faces = grid.cubes[y][x]!.faces;
-            if (x === 0 && y === 0) { // Top left chunk
-                const cz = Math.floor(NZ / 2);
-                const cy = Math.floor(RESOLUTION / 2);
-                const cx = Math.floor(RESOLUTION / 2);
+    // Initial Heat Drop centered GLOBALLY (using V5 Helper)
+    const worldW = (RESOLUTION - 2) * COLS;
+    const worldH = (RESOLUTION - 2) * ROWS;
 
-                for (let lz = 0; lz < NZ; lz++) {
-                    const zOff = lz * RESOLUTION * RESOLUTION;
-                    for (let ly = 0; ly < RESOLUTION; ly++) {
-                        const yOff = ly * RESOLUTION;
-                        for (let lx = 0; lx < RESOLUTION; lx++) {
-                            const dist = Math.sqrt((lx - cx) ** 2 + (ly - cy) ** 2 + (lz - cz) ** 2);
-                            if (dist < 8) {
-                                faces[0][zOff + yOff + lx] = 100.0; // 100 degrees
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Paint heat at face 0
+    grid.paintCircle(worldW / 2, worldH / 2, NZ / 2, 0, 15, 100.0);
 
     const canvas = document.createElement('canvas');
-    canvas.width = RESOLUTION * COLS;
-    canvas.height = RESOLUTION * ROWS;
+    canvas.width = (RESOLUTION - 2) * COLS;
+    canvas.height = (RESOLUTION - 2) * ROWS;
+    canvas.style.display = 'block';
     canvas.style.width = '100vw';
     canvas.style.height = '100vh';
     canvas.style.objectFit = 'contain';
@@ -65,15 +63,12 @@ async function bootstrap() {
     const adapter = new CanvasAdapter(canvas);
     const hud = new BenchmarkHUD('Thermal Diffusion 3D', `${RESOLUTION * COLS} x ${RESOLUTION * ROWS} x ${NZ}`);
 
-    // Z-slice to render
     let currentSliceZ = Math.floor(NZ / 2);
 
     async function tick() {
         const start = performance.now();
-
         await grid.compute();
 
-        // Render a 2D slice of the 3D volume
         adapter.renderFromFaces(
             grid.cubes.map(row => row.map(c => c!.faces)),
             grid.nx, grid.ny, COLS, ROWS,
@@ -81,7 +76,7 @@ async function bootstrap() {
                 faceIndex: 0,
                 colormap: 'heatmap',
                 minVal: 0,
-                maxVal: 50,
+                maxVal: 80, // Slightly tighter max to see internal colors better
                 sliceZ: currentSliceZ
             }
         );
@@ -89,11 +84,8 @@ async function bootstrap() {
         const ms = performance.now() - start;
         hud.updateCompute(ms);
         hud.tickFrame();
-
         requestAnimationFrame(tick);
     }
-
     tick();
 }
-
 bootstrap();

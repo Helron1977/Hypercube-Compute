@@ -4,7 +4,7 @@ export class CanvasAdapter {
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
-        const context = canvas.getContext('2d', { alpha: false });
+        const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
         if (!context) throw new Error("Could not get 2D context from canvas");
         this.ctx = context;
     }
@@ -28,8 +28,8 @@ export class CanvasAdapter {
         }
     ) {
         const sliceZ = options.sliceZ || 0;
-        const totalW = nx * cols;
-        const totalH = ny * rows;
+        const totalW = (nx - 2) * cols;
+        const totalH = (ny - 2) * rows;
 
         const imgData = this.ctx.getImageData(0, 0, totalW, totalH);
         const pixelData = imgData.data;
@@ -48,12 +48,14 @@ export class CanvasAdapter {
 
                 const zOff = sliceZ * ny * nx;
 
-                for (let ly = 0; ly < ny; ly++) {
-                    const py = gy * ny + ly;
-                    for (let lx = 0; lx < nx; lx++) {
-                        const px = gx * nx + lx;
+                for (let ly = 1; ly < ny - 1; ly++) {
+                    const py = gy * (ny - 2) + (ly - 1);
+                    for (let lx = 1; lx < nx - 1; lx++) {
+                        const px = gx * (nx - 2) + (lx - 1);
                         const srcIdx = zOff + ly * nx + lx;
                         const dstIdx = (py * totalW + px) * 4;
+
+                        // ... rest of mapping ...
 
                         // Obstacle check
                         if (obs && obs[srcIdx] > 0.5) {

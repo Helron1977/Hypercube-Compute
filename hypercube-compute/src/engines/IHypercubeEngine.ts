@@ -56,6 +56,11 @@ export interface IHypercubeEngine {
      * @description Permet au contrôleur (Grid) de propager la configuration des conditions aux limites à l'Engine.
      */
     setBoundaryConfig?(config: any): void;
+    /**
+     * @description Provides the equilibrium distribution for a given density and velocity.
+     * Essential for initiating physical disturbances (splashes) in LBM engines.
+     */
+    getEquilibrium?(rho: number, ux: number, uy: number): Float32Array;
 
     /**
      * Code source WGSL (Compute Shader) optionnel pour l'exécution sur GPU.

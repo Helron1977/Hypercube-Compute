@@ -4,6 +4,9 @@ import { FlowFieldEngine } from '../engines/FlowFieldEngine';
 import { FluidEngine } from '../engines/FluidEngine';
 import { AerodynamicsEngine } from '../engines/AerodynamicsEngine';
 import { OceanEngine } from '../engines/OceanEngine';
+import { HeatDiffusionEngine3D } from '../engines/HeatDiffusionEngine3D';
+import { VolumeDiffusionEngine } from '../engines/VolumeDiffusionEngine';
+import { GameOfLifeEngine } from '../engines/GameOfLifeEngine';
 
 export type EngineConstructor = new (...args: any[]) => IHypercubeEngine;
 
@@ -70,4 +73,7 @@ EngineRegistry.register('Simplified Fluid Dynamics', FluidEngine);
 EngineRegistry.register('Lattice Boltzmann D2Q9 (O(1))', AerodynamicsEngine);
 EngineRegistry.register('Aerodynamics LBM D2Q9', AerodynamicsEngine); // Alias de compatibilité
 EngineRegistry.register('OceanEngine', OceanEngine);
+EngineRegistry.register('HeatDiffusionEngine3D', HeatDiffusionEngine3D);
+EngineRegistry.register('Volume Diffusion (3D Stencil)', VolumeDiffusionEngine);
+EngineRegistry.register('GameOfLifeEngine', GameOfLifeEngine);
 

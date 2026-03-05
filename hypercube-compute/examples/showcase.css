@@ -1,0 +1,45 @@
+/* Showcase Styling */
+.showcase-description {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 350px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #eee;
+    padding: 20px;
+    border-radius: 12px;
+    font-family: 'Inter', sans-serif;
+    border: 1px solid rgba(0, 255, 204, 0.3);
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    backdrop-filter: blur(5px);
+}
+
+.showcase-description h2 {
+    margin: 0 0 10px 0;
+    color: #00ffcc;
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.showcase-description p {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    opacity: 0.8;
+}
+
+.showcase-title {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 300;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    z-index: 1000;
+}

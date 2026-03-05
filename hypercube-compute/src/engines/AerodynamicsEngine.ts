@@ -9,6 +9,9 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     private lastNx: number = 256;
     private lastNy: number = 256;
     public boundaryConfig: any = null;
+    private readonly cx = [0, 1, 0, -1, 0, -1, -1, 1, 1]; // Corrected order if needed, but matched with Ocean for consistency
+    private readonly cy = [0, 0, 1, 0, -1, 1, 1, -1, -1];
+    private readonly w = [4.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0];
 
     // WebGPU Attributes
     private pipelineLBM: GPUComputePipeline | null = null;
@@ -38,21 +41,27 @@ export class AerodynamicsEngine implements IHypercubeEngine {
         return [0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 22]; // Sync LBM pops + macros + smoke
     }
 
+    public getEquilibrium(rho: number, ux: number, uy: number): Float32Array {
+        const res = new Float32Array(9);
+        const u2 = ux * ux + uy * uy;
+        for (let k = 0; k < 9; k++) {
+            const cu = 3 * (this.cx[k] * ux + this.cy[k] * uy);
+            res[k] = this.w[k] * rho * (1 + cu + 0.5 * cu * cu - 1.5 * u2);
+        }
+        return res;
+    }
+
     public init(faces: Float32Array[], nx: number, ny: number, nz: number, isWorker: boolean = false): void {
         if (isWorker) return; // Do not overwrite SAB data initialized by HypercubeGrid
 
-        const cx = [0, 1, 0, -1, 0, 1, -1, -1, 1];
-        const cy = [0, 0, 1, 0, -1, 1, 1, -1, -1];
-        const w = [4.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0];
         const u0 = 0.12;
-
         for (let idx = 0; idx < nx * ny * nz; idx++) {
             const rho = 1.0;
             const ux = u0; const uy = 0.0;
             const u_sq = ux * ux + uy * uy;
             for (let i = 0; i < 9; i++) {
-                const cu = cx[i] * ux + cy[i] * uy;
-                const feq = w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u_sq);
+                const cu = this.cx[i] * ux + this.cy[i] * uy;
+                const feq = this.w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u_sq);
                 faces[i][idx] = feq;
                 faces[i + 9][idx] = feq;
             }

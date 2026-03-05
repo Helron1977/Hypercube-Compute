@@ -1,92 +1,59 @@
+import { HypercubeCpuGrid } from './core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from './core/HypercubeMasterBuffer';
-import { HypercubeChunk } from './core/HypercubeChunk';
-import type { IHypercubeEngine } from './engines/IHypercubeEngine';
+import { EngineRegistry } from './core/EngineRegistry';
 
-/**
- * Chef d'orchestre de la V2. 
- * Il possède la VRAM globale partagée et gère les instanciations de Cubes sans fragmentation RAM.
- */
-export class Hypercube {
-    private _masterBuffer: HypercubeMasterBuffer;
-    public cubes: Map<string, HypercubeChunk> = new Map();
-
-    get masterBuffer() {
-        return this._masterBuffer;
-    }
-
-    /**
-     * @param vRamAllocMegabytes Taille du ArrayBuffer en Mega-Octets (par defaut 50MB)
-     */
-    constructor(vRamAllocMegabytes: number = 50) {
-        this._masterBuffer = new HypercubeMasterBuffer(vRamAllocMegabytes * 1024 * 1024);
-        console.log(`[Hypercube.js SDK] Initialized with ${vRamAllocMegabytes}MB of Raw Buffer Memory.`);
-    }
-
-    /**
-     * Forge un nouveau Cube (View Paging) depuis le Buffer Maître.
-     */
-    public createCube(name: string, resolution: number | { nx: number, ny: number, nz?: number }, engine: IHypercubeEngine, numFaces: number = 6): HypercubeChunk {
-        if (this.cubes.has(name)) {
-            throw new Error(`Cube avec le nom ${name} existe déjà.`);
-        }
-
-        let nx, ny, nz;
-        if (typeof resolution === 'number') {
-            nx = resolution;
-            ny = resolution;
-            nz = 1;
-        } else {
-            nx = resolution.nx;
-            ny = resolution.ny;
-            nz = resolution.nz ?? 1;
-        }
-
-        const cube = new HypercubeChunk(0, 0, nx, ny, nz, this._masterBuffer, numFaces, 0);
-        cube.setEngine(engine);
-        this.cubes.set(name, cube);
-        return cube;
-    }
-
-    /**
-     * Accès sécurisé à un cube pour UI/Render logic.
-     */
-    public getCube(id: string): HypercubeChunk | undefined {
-        return this.cubes.get(id);
-    }
+export interface HypercubeConfig {
+    engine: string;
+    resolution: number | { nx: number, ny: number, nz?: number };
+    cols?: number;
+    rows?: number;
+    workers?: boolean;
+    workerScript?: string;
+    periodic?: boolean;
 }
 
+/**
+ * Hypercube V5 - High Level Facade
+ * The easiest way to start a simulation.
+ */
+export class Hypercube {
+    /**
+     * Creates and initializes a complete simulation grid.
+     */
+    public static async create(config: HypercubeConfig): Promise<HypercubeCpuGrid> {
+        const cols = config.cols ?? 1;
+        const rows = config.rows ?? 1;
+        const res = typeof config.resolution === 'number' ? config.resolution : config.resolution.nx;
 
+        // Auto-instantiate engine to get metadata
+        const tempEngine = EngineRegistry.create(config.engine);
+        const numFaces = tempEngine.getRequiredFaces();
 
+        // Calculate dimensions
+        let nx = 0, ny = 0, nz = 1;
+        if (typeof config.resolution === 'number') {
+            nx = ny = config.resolution;
+        } else {
+            nx = config.resolution.nx;
+            ny = config.resolution.ny;
+            nz = config.resolution.nz ?? 1;
+        }
 
+        // Auto-allocate MasterBuffer
+        const totalCellsPerChunk = nx * ny * nz;
+        const bytesNeeded = totalCellsPerChunk * numFaces * 4 * cols * rows + 4096;
+        const masterBuffer = new HypercubeMasterBuffer(bytesNeeded);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        // Bootstrap Grid
+        return await HypercubeCpuGrid.create(
+            cols, rows,
+            config.resolution,
+            masterBuffer,
+            () => EngineRegistry.create(config.engine),
+            numFaces,
+            config.periodic ?? true,
+            config.workers ?? true,
+            config.workerScript
+        );
+    }
+}

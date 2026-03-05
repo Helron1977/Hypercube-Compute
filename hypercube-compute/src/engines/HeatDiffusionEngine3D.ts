@@ -4,7 +4,7 @@ export class HeatDiffusionEngine3D implements IHypercubeEngine {
     private alpha: number = 0.1; // Diffusion rate
 
     get name(): string {
-        return "HeatDiffusionEngine3D-V4";
+        return "HeatDiffusionEngine3D";
     }
 
     getRequiredFaces(): number {
@@ -15,7 +15,9 @@ export class HeatDiffusionEngine3D implements IHypercubeEngine {
         return { alpha: this.alpha };
     }
 
-    init(faces: Float32Array[], nx: number, ny: number, nz: number): void {
+    init(faces: Float32Array[], nx: number, ny: number, nz: number, isWorker?: boolean): void {
+        if (isWorker) return; // Skip clear if worker (SharedArrayBuffer already initialized by main)
+
         // Clear buffers
         for (const face of faces) {
             face.fill(0);
@@ -37,47 +39,49 @@ export class HeatDiffusionEngine3D implements IHypercubeEngine {
     ): void {
         const temp_in = faces[0];
         const temp_out = faces[1];
-        // Optional: obstacles could be in faces[2] if we wanted them
         const obstacles = faces.length > 2 ? faces[2] : null;
 
-        // Very basic 3D Laplacian for thermal diffusion
+        // Laplacian 3D
         for (let z = 1; z < nz - 1; z++) {
             const zOff = z * ny * nx;
-            const zOffPlus = (z + 1) * ny * nx;
-            const zOffMinus = (z - 1) * ny * nx;
+            const zOffP = (z + 1) * ny * nx;
+            const zOffM = (z - 1) * ny * nx;
 
             for (let y = 1; y < ny - 1; y++) {
                 const yOff = y * nx;
-                const yOffPlus = (y + 1) * nx;
-                const yOffMinus = (y - 1) * nx;
+                const yOffP = (y + 1) * nx;
+                const yOffM = (y - 1) * nx;
 
                 for (let x = 1; x < nx - 1; x++) {
                     const idx = zOff + yOff + x;
 
                     if (obstacles && obstacles[idx] > 0) {
-                        temp_out[idx] = 0; // Cold wall
+                        temp_out[idx] = 0;
                         continue;
                     }
 
-                    const current = temp_in[idx];
+                    const val = temp_in[idx];
+                    const laplacian = (
+                        temp_in[idx - 1] + temp_in[idx + 1] + // Left / Right
+                        temp_in[zOff + yOffM + x] + temp_in[zOff + yOffP + x] + // Top / Bottom
+                        temp_in[zOffM + yOff + x] + temp_in[zOffP + yOff + x]   // Front / Back
+                    ) - 6 * val;
 
-                    // 6 neighbors (Left, Right, Top, Bottom, Front, Back)
-                    const left = temp_in[zOff + yOff + x - 1];
-                    const right = temp_in[zOff + yOff + x + 1];
-                    const top = temp_in[zOff + yOffMinus + x];
-                    const bottom = temp_in[zOff + yOffPlus + x];
-                    const front = temp_in[zOffPlus + yOff + x];
-                    const back = temp_in[zOffMinus + yOff + x];
-
-                    // Laplacian operator
-                    const laplacian = (left + right + top + bottom + front + back) - 6 * current;
-
-                    temp_out[idx] = current + this.alpha * laplacian;
+                    temp_out[idx] = val + this.alpha * laplacian;
                 }
             }
         }
 
-        // Swap references locally for next step
-        temp_in.set(temp_out);
+        // DANGEROUS: face.set() overwrites boundaries (ghost cells).
+        // Only copy back the "useful" part to avoid zeroing out sync data.
+        for (let z = 1; z < nz - 1; z++) {
+            const zOff = z * ny * nx;
+            for (let y = 1; y < ny - 1; y++) {
+                const yOff = zOff + y * nx;
+                const start = yOff + 1;
+                const end = yOff + nx - 1;
+                temp_in.set(temp_out.subarray(start, end), start);
+            }
+        }
     }
 }

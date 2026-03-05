@@ -6,16 +6,32 @@ import { CanvasAdapter } from '../src/io/CanvasAdapter';
 import { HypercubeMath } from '../src/math/HypercubeMath';
 import { BenchmarkHUD } from './shared/BenchmarkHUD';
 
-const RESOLUTION = 512;
+const RESOLUTION = 256;
 const ROWS = 2;
 const COLS = 2;
 
 async function bootstrap() {
+    // Add description overlay
+    const desc = document.createElement('div');
+    desc.className = 'showcase-description';
+    desc.innerHTML = `
+        <h2>01: Aérodynamique 2D</h2>
+        <p>Simulation fluide utilisant la méthode Lattice Boltzmann (LBM D2Q9) à O(1). 
+        Le calcul est distribué via un pool de Web Workers multithreadé (SharedArrayBuffer).</p>
+        <p style="margin-top:10px; font-size: 0.8rem; border-top: 1px solid #333; padding-top:10px;">
+        Vortex de Karman visibles derrière l'obstacle fixe.</p>
+    `;
+    document.body.appendChild(desc);
+
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = './showcase.css';
+    document.head.appendChild(link);
+
     const totalCells = RESOLUTION * RESOLUTION;
     const engineTemp = new AerodynamicsEngine();
     const numFaces = engineTemp.getRequiredFaces();
 
-    // Allocate contiguous SharedArrayBuffer with V4 Header (1024 bytes buffer)
     const masterBuffer = new HypercubeMasterBuffer(totalCells * numFaces * 4 * ROWS * COLS + 1024);
 
     const grid = await HypercubeCpuGrid.create(
@@ -26,7 +42,7 @@ async function bootstrap() {
         numFaces,
         false, // Not periodic
         true,   // Multithreading on
-        '/cpu.worker.ts'
+        new URL('./cpu.worker.ts', import.meta.url).href
     );
 
     // Apply strict Global Boundaries
@@ -40,19 +56,22 @@ async function bootstrap() {
         inflowDensity: 1.0
     };
 
-    // Draw a wind tunnel obstacle
-    const cx = Math.floor(RESOLUTION / 2);
+    // Draw obstacle in the center of the global grid
+    // In a 2x2 grid, the center (512 total) is the boundary.
+    // Let's place it at (RESOLUTION, RESOLUTION/2) global -> chunk(1, 0) side?
+    // Let's just put it in chunk (0,0) near the right edge to be safe
+    const cx = Math.floor(RESOLUTION * 0.7);
     const cy = Math.floor(RESOLUTION / 2);
+
     for (let y = 0; y < ROWS; y++) {
         for (let x = 0; x < COLS; x++) {
             const faces = grid.cubes[y][x]!.faces;
-            // Draw a circle in the global center chunk
-            const isCenterChunk = (x === Math.floor(COLS / 2) && y === Math.floor(ROWS / 2));
-            if (isCenterChunk) {
+            // Obstacle logic
+            if (x === 0 && y === 0) {
                 for (let ly = 0; ly < RESOLUTION; ly++) {
                     for (let lx = 0; lx < RESOLUTION; lx++) {
                         const dist = Math.sqrt((lx - cx) ** 2 + (ly - cy) ** 2);
-                        if (dist < 40) {
+                        if (dist < 32) {
                             faces[18][ly * RESOLUTION + lx] = 1.0;
                         }
                     }
@@ -61,10 +80,11 @@ async function bootstrap() {
         }
     }
 
-    // Prepare Renderer
+    // Prepare Rendereur sur la grille UTILE (sans ghost cells)
     const canvas = document.createElement('canvas');
-    canvas.width = RESOLUTION * COLS;
-    canvas.height = RESOLUTION * ROWS;
+    canvas.width = (RESOLUTION - 2) * COLS;
+    canvas.height = (RESOLUTION - 2) * ROWS;
+    canvas.style.display = 'block';
     canvas.style.width = '100vw';
     canvas.style.height = '100vh';
     canvas.style.objectFit = 'contain';

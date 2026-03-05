@@ -4,16 +4,32 @@ import { OceanEngine } from '../src/engines/OceanEngine';
 import { HypercubeIsoRenderer } from '../src/utils/HypercubeIsoRenderer';
 import { BenchmarkHUD } from './shared/BenchmarkHUD';
 
-const RESOLUTION = 256;
-const ROWS = 2; // Testing multi-chunk sync for Ocean
+const RESOLUTION = 128; // Faster for CPU Iso
+const ROWS = 2;
 const COLS = 2;
 
 async function bootstrap() {
+    // Add description overlay
+    const desc = document.createElement('div');
+    desc.className = 'showcase-description';
+    desc.innerHTML = `
+        <h2>02: Ocean 2.5D</h2>
+        <p>Simulation de vagues et d'ondes de surface (Wave Equation) avec rendu isométrique volumétrique. 
+        Notez la synchronisation fluide des ondes entre les 4 chunks de calcul.</p>
+        <p style="margin-top:10px; font-size: 0.8rem; border-top: 1px solid #333; padding-top:10px;">
+        Vue isométrique 2.5D (Painter's Algorithm).</p>
+    `;
+    document.body.appendChild(desc);
+
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = './showcase.css';
+    document.head.appendChild(link);
+
     const totalCells = RESOLUTION * RESOLUTION;
     const engineTemp = new OceanEngine();
     const numFaces = engineTemp.getRequiredFaces();
 
-    // Allocate contiguous SharedArrayBuffer with V4 Header
     const masterBuffer = new HypercubeMasterBuffer(totalCells * numFaces * 4 * ROWS * COLS + 1024);
 
     const grid = await HypercubeCpuGrid.create(
@@ -22,30 +38,26 @@ async function bootstrap() {
         masterBuffer,
         () => new OceanEngine(),
         numFaces,
-        true, // Periodic boundaries globally for the pool
+        true, // Periodic boundaries globally
         true, // Multithreading on
-        '/cpu.worker.ts'
+        new URL('./cpu.worker.ts', import.meta.url).href
     );
 
-    // Initial Splash
-    const cx = Math.floor(RESOLUTION / 2);
-    const cy = Math.floor(RESOLUTION / 2);
-    for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-            const faces = grid.cubes[y][x]!.faces;
-            if (x === Math.floor(COLS / 2) && y === Math.floor(ROWS / 2)) {
-                for (let ly = 0; ly < RESOLUTION; ly++) {
-                    for (let lx = 0; lx < RESOLUTION; lx++) {
-                        const dist = Math.sqrt((lx - cx) ** 2 + (ly - cy) ** 2);
-                        if (dist < 30) {
-                            // Density drop
-                            faces[9][ly * RESOLUTION + lx] = 2.0;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Initial Splash (GLOBAL CENTERED using V5 Helper)
+    const worldW = (RESOLUTION - 2) * COLS;
+    const worldH = (RESOLUTION - 2) * ROWS;
+
+    // applyEquilibrium automatically handles chunk boundaries 
+    // and re-equilibrates LBM populations (f0-f8)
+    grid.applyEquilibrium(
+        worldW / 2,
+        worldH / 2,
+        0,    // z
+        20,   // radius
+        1.8,  // rho
+        0.5,  // ux
+        0.5   // uy
+    );
 
     // Prepare Advanced IsoRenderer
     const canvas = document.createElement('canvas');
@@ -56,35 +68,28 @@ async function bootstrap() {
     canvas.style.left = '0';
     document.body.appendChild(canvas);
 
-    const isoRenderer = new HypercubeIsoRenderer(canvas, undefined, 4.0); // 4x scale factor
+    const isoRenderer = new HypercubeIsoRenderer(canvas, undefined, 4.0);
     const hud = new BenchmarkHUD('OceanEngine 2.5D IsoVolume', `${RESOLUTION * COLS} x ${RESOLUTION * ROWS}`);
 
-    // Main Compute Loop
     async function tick() {
         const start = performance.now();
-
-        // 1. Math Step
         await grid.compute();
 
-        // 2. Render 2.5D Isometric 
-        isoRenderer.clearAndSetup(0, 0, 0);
+        isoRenderer.clearAndSetup(5, 15, 45); // Deep sea dark blue
         isoRenderer.renderMultiChunkVolume(
             grid.cubes.map(r => r.map(c => c!.faces)),
             grid.nx, grid.ny, COLS, ROWS,
             {
-                densityFaceIndex: 9,
-                obstacleFaceIndex: 20
+                densityFaceIndex: 22, // rho
+                obstacleFaceIndex: 18 // obst
             }
         );
 
         const ms = performance.now() - start;
         hud.updateCompute(ms);
         hud.tickFrame();
-
         requestAnimationFrame(tick);
     }
-
     tick();
 }
-
 bootstrap();
