@@ -20,7 +20,7 @@ describe('OceanEngine Multi-Chunk (Grid 2x2 Boundary Exchange)', () => {
         const grid = await HypercubeCpuGrid.create(
             numChunksX, numChunksY, mapSize, masterBuffer,
             () => oceanEngine,
-            numFaces, true, 'cpu', false // isPeriodic = true
+            numFaces, true, true, undefined, 'cpu'
         );
 
         const w = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
@@ -82,5 +82,19 @@ describe('OceanEngine Multi-Chunk (Grid 2x2 Boundary Exchange)', () => {
         console.log(`Multi-Chunk Mass conservation differencial: ${diff}`);
 
         expect(diff).toBeLessThan(0.1);
+
+        // --- NEW: VERIFY MOVEMENT ---
+        // Let's check if the density has actually changed from its initial state (1.0)
+        let totalChange = 0;
+        for (let cy = 0; cy < numChunksY; cy++) {
+            for (let cx = 0; cx < numChunksX; cx++) {
+                const faces = grid.cubes[cy][cx]?.faces!;
+                for (let i = 0; i < mapSize * mapSize; i++) {
+                    totalChange += Math.abs(faces[22][i] - 1.0);
+                }
+            }
+        }
+        console.log(`Total Density Change after 1000 steps: ${totalChange}`);
+        expect(totalChange).toBeGreaterThan(0.1); // Simulation must have progressed
     });
 });

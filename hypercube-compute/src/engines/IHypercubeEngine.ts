@@ -53,6 +53,11 @@ export interface IHypercubeEngine {
     getConfig?(): Record<string, any>;
 
     /**
+     * @description Permet au contrôleur (Grid) de propager une configuration partielle ou complète au moteur.
+     */
+    applyConfig?(config: any): void;
+
+    /**
      * @description Permet au contrôleur (Grid) de propager la configuration des conditions aux limites à l'Engine.
      */
     setBoundaryConfig?(config: any): void;
@@ -70,13 +75,14 @@ export interface IHypercubeEngine {
     /**
      * Initialisation spécifique au GPU (Optionnel).
      * @param device Le GPUDevice actif.
-     * @param cubeBuffer Le buffer unique contenant TOUTES les faces du cube (contingu).
+     * @param readBuffer Buffer initial pour la lecture.
+     * @param writeBuffer Buffer initial pour l'écriture.
      * @param stride Le décalage en octets (byte stride) entre le début de chaque face.
      * @param nx Largeur
      * @param ny Hauteur
      * @param nz Profondeur
      */
-    initGPU?(device: GPUDevice, cubeBuffer: GPUBuffer, stride: number, nx: number, ny: number, nz: number): void;
+    initGPU?(device: GPUDevice, readBuffer: GPUBuffer, writeBuffer: GPUBuffer, stride: number, nx: number, ny: number, nz: number): void;
 
     /**
      * Dispatch GPU (Optionnel).
@@ -85,8 +91,10 @@ export interface IHypercubeEngine {
      * @param nx Largeur
      * @param ny Hauteur
      * @param nz Profondeur
+     * @param readBuffer Buffer source (Frame N)
+     * @param writeBuffer Buffer destination (Frame N+1)
      */
-    computeGPU?(device: GPUDevice, commandEncoder: GPUCommandEncoder, nx: number, ny: number, nz: number): void;
+    computeGPU?(device: GPUDevice, commandEncoder: GPUCommandEncoder, nx: number, ny: number, nz: number, readBuffer: GPUBuffer, writeBuffer: GPUBuffer): void;
 }
 
 

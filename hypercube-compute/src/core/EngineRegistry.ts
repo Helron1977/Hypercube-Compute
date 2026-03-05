@@ -51,19 +51,24 @@ export class EngineRegistry {
     public static applyConfig(engine: IHypercubeEngine, config: any) {
         if (!config || typeof config !== 'object') return;
 
+        // Priority 1: Engine-specific applyConfig
+        if (typeof engine.applyConfig === 'function') {
+            engine.applyConfig(config);
+            return;
+        }
+
+        // Priority 2: Generic parity handling (must be top-level)
+        if (config.parity !== undefined) {
+            (engine as any).parity = config.parity;
+        }
+
         if (config.boundaryConfig !== undefined && typeof engine.setBoundaryConfig === 'function') {
             engine.setBoundaryConfig(config.boundaryConfig);
         }
 
-        // Cas particulier OceanEngine qui encapsule sa config dans 'params'
-        if (engine.name === 'OceanEngine') {
-            (engine as any).params = { ...(engine as any).params, ...config };
-            return;
-        }
-
-        // Cas général : fusion directe (ex: Aerodynamics, Heatmap)
+        // Priority 3: Generic merge (fallback)
         for (const key of Object.keys(config)) {
-            if (key !== 'boundaryConfig') {
+            if (key !== 'boundaryConfig' && key !== 'parity') {
                 (engine as any)[key] = config[key];
             }
         }
