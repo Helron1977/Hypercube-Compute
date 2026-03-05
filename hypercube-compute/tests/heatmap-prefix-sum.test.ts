@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { HeatmapEngine } from '../src/engines/HeatmapEngine';
 
@@ -9,14 +9,13 @@ describe('HeatmapEngine GPU vs CPU tests', () => {
         const mapSize = 256;
         const totalCells = mapSize * mapSize;
         const numFaces = 5;
-        const masterBuffer = new HypercubeMasterBuffer(totalCells * numFaces * 4);
+        const masterBuffer = new HypercubeMasterBuffer(10 * 1024 * 1024);
 
         // --- 1. SETUP ENGINE (CPU MODE) ---
-        const cpuGrid = await HypercubeGrid.create(
+        const cpuGrid = await HypercubeCpuGrid.create(
             1, 1, mapSize, masterBuffer,
             () => new HeatmapEngine(10, 1.0),
-            numFaces, false, 'cpu', false
-        );
+            numFaces, false, false);
 
         const facesCPU = cpuGrid.cubes[0][0]?.faces!;
 
@@ -33,52 +32,11 @@ describe('HeatmapEngine GPU vs CPU tests', () => {
         const cpuSAT = new Float32Array(facesCPU[4]);
 
         // --- 2. SETUP ENGINE (GPU MODE) ---
-        const WebGPUIsSupported = (typeof window !== 'undefined' && 'devicePixelRatio' in window) || true; // Stub for testing node. If true GPU test can run.
+        // V5.3 Architecture note: WebGPU rendering and compute architecture is currently in the design phase.
+        // We skip this assertion for now as HypercubeCpuGrid is strictly CPU-only in V5.
+        console.warn('Skipping true WebGPU execution benchmark in Node/Vitest environment as V5 WebGPU is pending.');
+        return;
 
-        // Since we are running in vitest (Node), native WebGPU might not be available unless mocked
-        // For the sake of this roadmap test structure we configure it, but we might skip actual GPU compute 
-        // if context device is null.
-        try {
-            const gpuGrid = await HypercubeGrid.create(
-                1, 1, mapSize, masterBuffer,  // reuse buffer (will be overwritten)
-                () => new HeatmapEngine(10, 1.0),
-                numFaces, false, 'webgpu', false
-            );
-
-            // Si WebGPU n'a pas pu init (ex: headless Node), WebGPUContext throwera silencieusement et mode sera reset à cpu. 
-            if (gpuGrid.mode !== 'webgpu') {
-                console.warn('Skipping true WebGPU execution benchmark in Node/Vitest environment. Please run in browser.');
-                return;
-            }
-
-            // Ré-initialiser la face 1 (car elle va l'être)
-            const facesGPU = gpuGrid.cubes[0][0]?.faces!;
-            facesGPU[1].fill(0);
-            for (let i = 0; i < mapSize; i++) {
-                facesGPU[1][i * mapSize + i] = 1.0;
-            }
-
-            // Execution GPU
-            console.time('GPU Compute');
-            await gpuGrid.compute();
-            console.timeEnd('GPU Compute');
-
-            const gpuDiffusion = facesGPU[2];
-            const gpuSAT = facesGPU[4];
-
-            // --- 3. ASSERTIONS (TOLÉRANCE 1e-5) ---
-            let maxDiffSAT = 0;
-            let maxDiffDiff = 0;
-            for (let i = 0; i < gpuSAT.length; i++) {
-                maxDiffSAT = Math.max(maxDiffSAT, Math.abs(cpuSAT[i] - gpuSAT[i]));
-                maxDiffDiff = Math.max(maxDiffDiff, Math.abs(cpuDiffusion[i] - gpuDiffusion[i]));
-            }
-
-            expect(maxDiffSAT).toBeLessThan(1e-5);
-            expect(maxDiffDiff).toBeLessThan(1e-5);
-
-        } catch (e) {
-            console.warn('WebGPU test skipped or failed init in Vitest context:', e);
-        }
+        // Test suite will cover WebGPU in V6
     });
 });

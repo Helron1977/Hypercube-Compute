@@ -1,4 +1,5 @@
-import type { HypercubeGrid } from './HypercubeGrid';
+import type { HypercubeCpuGrid } from './HypercubeCpuGrid';
+import type { HypercubeGpuGrid } from './HypercubeGpuGrid';
 
 /**
  * Options de rendu pour le Compositeur (7ème Plan).
@@ -13,12 +14,12 @@ export interface CompositorOptions {
 
 /**
  * HypercubeCompositor (Le "7ème Plan")
- * Couche abstraite prenant les données logiques des 6 Faces du HypercubeGrid
+ * Couche abstraite prenant les données logiques des 6 Faces du HypercubeCpuGrid
  * pour les synthétiser en une image visuelle via un fragment shader (ou fallback CPU).
  * Permet un affichage haute-performance asynchrone sans bloquer l'UI principale.
  */
 export class HypercubeCompositor {
-    private grid: HypercubeGrid;
+    private grid: HypercubeCpuGrid | HypercubeGpuGrid;
     private options: CompositorOptions;
 
     // WebGPU Context
@@ -31,7 +32,7 @@ export class HypercubeCompositor {
     private ctx2d: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
     private imageData: ImageData | null = null;
 
-    constructor(grid: HypercubeGrid, options: CompositorOptions) {
+    constructor(grid: HypercubeCpuGrid | HypercubeGpuGrid, options: CompositorOptions) {
         this.grid = grid;
         this.options = options;
     }
@@ -40,7 +41,7 @@ export class HypercubeCompositor {
      * Initialise le contexte graphique (WebGPU ou 2D) en fonction du mode de la grille.
      */
     async init(): Promise<boolean> {
-        if (this.grid.mode === 'webgpu') {
+        if ('computeGPU' in (this.grid.cubes[0][0]?.engine || {}) || (this.grid as any).constructor.name === 'HypercubeGpuGrid') {
             return await this.initWebGPU();
         } else {
             return this.initCPU();
@@ -51,7 +52,7 @@ export class HypercubeCompositor {
      * Effectue le rendu des données logiques (Faces) vers le Canvas.
      */
     render(): void {
-        if (this.grid.mode === 'webgpu') {
+        if ('computeGPU' in (this.grid.cubes[0][0]?.engine || {}) || (this.grid as any).constructor.name === 'HypercubeGpuGrid') {
             this.renderWebGPU();
         } else {
             this.renderCPU();

@@ -32,20 +32,34 @@ class WorkerMasterBufferDummy {
 // Cache pour conserver l'état des moteurs (ex: this.initialized) entre chaque frame
 const chunkCache = new Map<number, HypercubeChunk>();
 
+// Reference mémoire globale initialisée une seule fois
+let globalSharedBuffer: SharedArrayBuffer | null = null;
+
 self.onmessage = (e: MessageEvent) => {
     const data = e.data;
 
-    if (data.type === 'COMPUTE') {
-        const { engineName, engineConfig, sharedBuffer, cubeOffset, stride, numFaces, nx, ny, nz, chunkX, chunkY } = data;
+    if (data.type === 'INIT') {
+        if (data.sharedBuffer) {
+            globalSharedBuffer = data.sharedBuffer;
+            postMessage({ type: 'INIT', success: true });
+        } else {
+            console.error("[Worker CPU] No SharedArrayBuffer provided during INIT.");
+            postMessage({ type: 'DONE', success: false });
+        }
+        return;
+    }
 
-        if (!sharedBuffer) {
-            console.error("[Worker] Pas de SharedArrayBuffer reçu.");
+    if (data.type === 'COMPUTE') {
+        const { engineName, engineConfig, cubeOffset, stride, numFaces, nx, ny, nz, chunkX, chunkY } = data;
+
+        if (!globalSharedBuffer) {
+            console.error("[Worker CPU] Pas de SharedArrayBuffer globalisé.");
             postMessage({ type: 'DONE', success: false });
             return;
         }
 
         // --- Validate Header ---
-        const header = new Uint32Array(sharedBuffer, 0, 2);
+        const header = new Uint32Array(globalSharedBuffer, 0, 2);
         if (header[0] !== 0x48595045 || header[1] !== 4) {
             console.error("[Worker CPU] Buffer invalide ou version mismatch. Format attendu: HYPE v4.");
             postMessage({ type: 'DONE', success: false });
@@ -66,7 +80,7 @@ self.onmessage = (e: MessageEvent) => {
             }
 
             // 2. Mock du Master Buffer pour Mapper la VUE
-            const dummyBuffer = new WorkerMasterBufferDummy(sharedBuffer);
+            const dummyBuffer = new WorkerMasterBufferDummy(globalSharedBuffer);
             dummyBuffer.setMockLocation(cubeOffset, stride);
 
             // 3. Reconstruire le Cube (Zéro-Copie des données)

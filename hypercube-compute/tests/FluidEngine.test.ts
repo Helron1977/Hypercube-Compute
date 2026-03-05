@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { FluidEngine } from '../src/engines/FluidEngine';
 
@@ -7,13 +7,12 @@ describe('FluidEngine v3 minimalist test', () => {
     it('simulates advection, buoyancy and dissipation without NaN', async () => {
         const mapSize = 8;
         const totalCells = mapSize * mapSize;
-        const masterBuffer = new HypercubeMasterBuffer(totalCells * 6 * 4);
+        const masterBuffer = new HypercubeMasterBuffer(10 * 1024 * 1024);
 
-        const grid = await HypercubeGrid.create(
+        const grid = await HypercubeCpuGrid.create(
             1, 1, mapSize, masterBuffer,
             () => new FluidEngine(0.5, 0.2, 0.99),
-            6, false, 'cpu', false
-        );
+            6, false, false);
 
         const engine = grid.cubes[0][0]?.engine as FluidEngine;
         const faces = grid.cubes[0][0]?.faces!;

@@ -6,14 +6,9 @@ import type { IHypercubeEngine, FlatTensorView } from "./IHypercubeEngine";
  */
 export class AerodynamicsEngine implements IHypercubeEngine {
     public dragScore: number = 0;
-    public isLeftBoundary: boolean = true;
-    public isRightBoundary: boolean = false;
-    public targetX: number = 256;
-    public targetY: number = 256;
-    public weight: number = 0.0;
-    public interaction = { mouseX: 0, mouseY: 0, active: false };
     private lastNx: number = 256;
     private lastNy: number = 256;
+    public boundaryConfig: any = null;
 
     // WebGPU Attributes
     private pipelineLBM: GPUComputePipeline | null = null;
@@ -31,12 +26,12 @@ export class AerodynamicsEngine implements IHypercubeEngine {
 
     public getConfig(): Record<string, any> {
         return {
-            targetX: this.targetX,
-            targetY: this.targetY,
-            weight: this.weight,
-            isLeftBoundary: this.isLeftBoundary,
-            isRightBoundary: this.isRightBoundary
+            boundaryConfig: this.boundaryConfig
         };
+    }
+
+    public setBoundaryConfig(config: any): void {
+        this.boundaryConfig = config;
     }
 
     public getSyncFaces(): number[] {
@@ -110,7 +105,6 @@ export class AerodynamicsEngine implements IHypercubeEngine {
         f32[1] = 0.12; // u0
         f32[2] = 1.95; // omega
         u32[3] = strideFloats;
-        u32[4] = this.isLeftBoundary ? 1 : 0;
 
         device.queue.writeBuffer(this.uniformBuffer, 0, uniformData);
 
@@ -123,33 +117,7 @@ export class AerodynamicsEngine implements IHypercubeEngine {
         });
     }
 
-    public addGlobalCurrent(faces: Float32Array[], targetUx: number, targetUy: number): void {
-        const ux = faces[19];
-        const uy = faces[20];
-        for (let i = 0; i < ux.length; i++) {
-            ux[i] += targetUx;
-            uy[i] += targetUy;
-        }
-    }
 
-    public addVortex(faces: Float32Array[], mx: number, my: number, strength: number = 10.0): void {
-        this.interaction.mouseX = mx;
-        this.interaction.mouseY = my;
-        this.interaction.active = true;
-        const nx = this.lastNx;
-        const ny = this.lastNy;
-        const smoke = faces[22];
-        const r = 10;
-        for (let dy = -r; dy <= r; dy++) {
-            for (let dx = -r; dx <= r; dx++) {
-                const ix = Math.floor(mx + dx), iy = Math.floor(my + dy);
-                if (ix >= 0 && ix < nx && iy >= 0 && iy < ny) {
-                    const d2 = dx * dx + dy * dy;
-                    if (d2 < r * r) smoke[iy * nx + ix] = 1.0;
-                }
-            }
-        }
-    }
 
     public computeGPU(device: GPUDevice, commandEncoder: GPUCommandEncoder, nx: number, ny: number, nz: number): void {
         if (!this.bindGroup || !this.pipelineLBM || !this.pipelineVorticity) return;
@@ -180,10 +148,22 @@ export class AerodynamicsEngine implements IHypercubeEngine {
         const curl_out = faces[21];
         const smoke = faces[22];
 
-        const cx = [0, 1, 0, -1, 0, 1, -1, -1, 1];
-        const cy = [0, 0, 1, 0, -1, 1, 1, -1, -1];
-        const w = [4.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0];
-        const opp = [0, 3, 4, 1, 2, 7, 8, 5, 6];
+        const cx_w = [
+            4.0 / 9.0,         // c0 (0,0)
+            1.0 / 9.0,         // c1 (1,0)
+            1.0 / 9.0,         // c2 (0,1)
+            1.0 / 9.0,         // c3 (-1,0)
+            1.0 / 9.0,         // c4 (0,-1)
+            1.0 / 36.0,        // c5 (1,1)
+            1.0 / 36.0,        // c6 (-1,1)
+            1.0 / 36.0,        // c7 (-1,-1)
+            1.0 / 36.0         // c8 (1,-1)
+        ];
+
+        const f0_arr = faces[0], f1_arr = faces[1], f2_arr = faces[2], f3_arr = faces[3], f4_arr = faces[4];
+        const f5_arr = faces[5], f6_arr = faces[6], f7_arr = faces[7], f8_arr = faces[8];
+        const out0 = faces[9], out1 = faces[10], out2 = faces[11], out3 = faces[12], out4 = faces[13];
+        const out5 = faces[14], out6 = faces[15], out7 = faces[16], out8 = faces[17];
 
         const u0 = 0.12;
         const omega = 1.95;
@@ -193,52 +173,98 @@ export class AerodynamicsEngine implements IHypercubeEngine {
         for (let lz = 0; lz < nz; lz++) {
             const zOff = lz * ny * nx;
 
-            // 1. LBM CORE
+            // 1. PULL-STREAMING, MACROS & COLLISION (O1 Optimized)
             for (let y = 1; y < ny - 1; y++) {
                 for (let x = 1; x < nx - 1; x++) {
-                    const idx = zOff + y * nx + x;
-                    if (obstacles[idx] > 0) {
-                        ux_out[idx] = 0;
-                        uy_out[idx] = 0;
+                    const i = zOff + y * nx + x;
+
+                    if (obstacles[i] > 0) {
+                        ux_out[i] = 0;
+                        uy_out[i] = 0;
                         continue;
                     }
 
-                    let rho = 0, ux = 0, uy = 0;
-                    for (let i = 0; i < 9; i++) {
-                        const f_val = faces[i][idx];
-                        rho += f_val;
-                        ux += cx[i] * f_val;
-                        uy += cy[i] * f_val;
-                    }
 
-                    if (x === 1 && this.isLeftBoundary) {
-                        ux = u0 + (Math.random() - 0.5) * 0.001;
-                        uy = (Math.random() - 0.5) * 0.001;
-                        rho = 1.0;
-                    }
+
+                    // --- PULL STREAMING UNROLLED ---
+                    // pfX is the population arriving FROM direction X.
+                    let pf0 = f0_arr[i];
+                    let pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8;
+
+                    // Dir 1 (cx:1, cy:0) opposite is 3
+                    let ni1 = zOff + y * nx + (x - 1);
+                    pf1 = (obstacles[ni1] > 0) ? f3_arr[i] : f1_arr[ni1];
+                    // Dir 2 (cx:0, cy:1) opposite is 4
+                    let ni2 = zOff + (y - 1) * nx + x;
+                    pf2 = (obstacles[ni2] > 0) ? f4_arr[i] : f2_arr[ni2];
+                    // Dir 3 (cx:-1, cy:0) opposite is 1
+                    let ni3 = zOff + y * nx + (x + 1);
+                    pf3 = (obstacles[ni3] > 0) ? f1_arr[i] : f3_arr[ni3];
+                    // Dir 4 (cx:0, cy:-1) opposite is 2
+                    let ni4 = zOff + (y + 1) * nx + x;
+                    pf4 = (obstacles[ni4] > 0) ? f2_arr[i] : f4_arr[ni4];
+
+                    // Dir 5 (cx:1, cy:1) opp 7
+                    let ni5 = zOff + (y - 1) * nx + (x - 1);
+                    pf5 = (obstacles[ni5] > 0) ? f7_arr[i] : f5_arr[ni5];
+                    // Dir 6 (cx:-1, cy:1) opp 8
+                    let ni6 = zOff + (y - 1) * nx + (x + 1);
+                    pf6 = (obstacles[ni6] > 0) ? f8_arr[i] : f6_arr[ni6];
+                    // Dir 7 (cx:-1, cy:-1) opp 5
+                    let ni7 = zOff + (y + 1) * nx + (x + 1);
+                    pf7 = (obstacles[ni7] > 0) ? f5_arr[i] : f7_arr[ni7];
+                    // Dir 8 (cx:1, cy:-1) opp 6
+                    let ni8 = zOff + (y + 1) * nx + (x - 1);
+                    pf8 = (obstacles[ni8] > 0) ? f6_arr[i] : f8_arr[ni8];
+
+                    // MACROS CALCULATION
+                    const rho = pf0 + pf1 + pf2 + pf3 + pf4 + pf5 + pf6 + pf7 + pf8;
+                    let ux = (pf1 + pf5 + pf8) - (pf3 + pf6 + pf7);
+                    let uy = (pf2 + pf5 + pf6) - (pf4 + pf7 + pf8);
 
                     if (rho > 0) { ux /= rho; uy /= rho; }
-                    ux_out[idx] = ux;
-                    uy_out[idx] = uy;
+                    ux_out[i] = ux;
+                    uy_out[i] = uy;
 
                     const u_sq = ux * ux + uy * uy;
-                    for (let i = 0; i < 9; i++) {
-                        const cu = cx[i] * ux + cy[i] * uy;
-                        const feq = w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u_sq);
-                        const f_post = faces[i][idx] * (1.0 - omega) + feq * omega;
+                    const u_sq_15 = 1.5 * u_sq;
+                    const one_minus_omega = 1.0 - omega;
 
-                        let nnx = x + cx[i], nny = y + cy[i];
-                        if (nny < 0) nny = ny - 1; else if (nny >= ny) nny = 0;
-                        if (nnx < 0 || nnx >= nx) continue;
+                    // EQUILIBRIUM & COLLISION
+                    let feq = cx_w[0] * rho * (1.0 - u_sq_15);
+                    out0[i] = pf0 * one_minus_omega + feq * omega;
 
-                        const nIdx = zOff + nny * nx + nnx;
-                        if (obstacles[nIdx] > 0) {
-                            faces[opp[i] + 9][idx] = f_post;
-                            frameDrag += f_post * cx[i];
-                        } else {
-                            faces[i + 9][nIdx] = f_post;
-                        }
-                    }
+                    let cu = ux;
+                    feq = cx_w[1] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                    out1[i] = pf1 * one_minus_omega + feq * omega;
+
+                    cu = uy;
+                    feq = cx_w[2] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                    out2[i] = pf2 * one_minus_omega + feq * omega;
+
+                    cu = -ux;
+                    feq = cx_w[3] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                    out3[i] = pf3 * one_minus_omega + feq * omega;
+
+                    cu = -uy;
+                    feq = cx_w[4] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                    out4[i] = pf4 * one_minus_omega + feq * omega;
+
+                    cu = ux + uy;
+                    feq = cx_w[5] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                    out5[i] = pf5 * one_minus_omega + feq * omega;
+
+                    cu = -ux + uy;
+                    feq = cx_w[6] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                    out6[i] = pf6 * one_minus_omega + feq * omega;
+
+                    cu = -ux - uy;
+                    feq = cx_w[7] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                    out7[i] = pf7 * one_minus_omega + feq * omega;
+
+                    cu = ux - uy;
+                    feq = cx_w[8] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                    out8[i] = pf8 * one_minus_omega + feq * omega;
                 }
             }
 
@@ -309,7 +335,6 @@ export class AerodynamicsEngine implements IHypercubeEngine {
                 u0: f32,
                 omega: f32,
                 stride: u32,
-                isLeftBoundary: u32,
             };
 
             @group(0) @binding(0) var<storage, read_write> cube: array<f32>;
@@ -354,7 +379,7 @@ export class AerodynamicsEngine implements IHypercubeEngine {
                     uy = uy + cy[i] * f_val;
                 }
 
-                if (x == 1u && config.isLeftBoundary > 0u) { ux = config.u0; uy = 0.0; rho = 1.0; }
+
                 if (rho > 0.0) { ux = ux / rho; uy = uy / rho; }
                 set_face(19u, idx, ux);
                 set_face(20u, idx, uy);

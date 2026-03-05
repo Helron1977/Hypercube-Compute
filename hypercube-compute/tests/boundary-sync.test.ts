@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { BlankEngine } from '../src/templates/BlankEngine'; // We can use BlankEngine for pure math testing
 
@@ -11,7 +11,7 @@ describe('HypercubeGrid Boundary Synchronization', () => {
         const master = new HypercubeMasterBuffer();
 
         // 2 cols, 1 row, non-periodic
-        const grid = await HypercubeGrid.create(2, 1, { nx, ny, nz }, master, () => new BlankEngine(), totalFaces, false, 'cpu', false);
+        const grid = await HypercubeCpuGrid.create(2, 1, { nx, ny, nz }, master, () => new BlankEngine(), totalFaces, false, false);
 
         const leftChunk = grid.cubes[0][0]!;
         const rightChunk = grid.cubes[0][1]!;
@@ -48,7 +48,7 @@ describe('HypercubeGrid Boundary Synchronization', () => {
         const master = new HypercubeMasterBuffer();
 
         // 1 col, 2 rows, non-periodic
-        const grid = await HypercubeGrid.create(1, 2, { nx, ny, nz }, master, () => new BlankEngine(), totalFaces, false, 'cpu', false);
+        const grid = await HypercubeCpuGrid.create(1, 2, { nx, ny, nz }, master, () => new BlankEngine(), totalFaces, false, false);
 
         const topChunk = grid.cubes[0][0]!;
         const botChunk = grid.cubes[1][0]!;

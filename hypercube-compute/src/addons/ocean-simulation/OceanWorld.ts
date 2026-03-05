@@ -1,6 +1,7 @@
 import { HypercubeMasterBuffer } from '../../core/HypercubeMasterBuffer';
-import { HypercubeGrid } from '../../core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../../core/HypercubeCpuGrid';
 import { OceanEngine } from './OceanEngine';
+import { HypercubeMath } from '../../math/HypercubeMath';
 
 export interface Boat {
     x: number; // Global coordinates
@@ -18,9 +19,11 @@ export class OceanWorld {
     public readonly globalSizeW: number;
     public readonly globalSizeH: number;
 
-    public grid: HypercubeGrid;
+    public grid: HypercubeCpuGrid;
     public boats: Boat[] = [];
     public keys = { up: false, down: false, left: false, right: false };
+    public vortexStrength: number = 0.02;
+    public vortexRadius: number = 28;
 
     constructor(
         masterBuffer: HypercubeMasterBuffer,
@@ -36,7 +39,7 @@ export class OceanWorld {
 
         // Create the HypercubeGrid with continuous periodic boundaries
         // 24 faces are required by OceanEngine (LBM D2Q9 + Macro + Bio)
-        this.grid = new HypercubeGrid(cols, rows, chunkSize, masterBuffer, () => new OceanEngine(), 24, true);
+        this.grid = new HypercubeCpuGrid(cols, rows, chunkSize, masterBuffer, () => new OceanEngine(), 24, true);
 
         this.reset();
     }
@@ -191,15 +194,8 @@ export class OceanWorld {
 
     // Paramètres Globaux du "Touilleur" (Tempête/Vortex)
     public setVortexParams(strength: number, radius: number) {
-        for (let y = 0; y < this.rows; y++) {
-            for (let x = 0; x < this.cols; x++) {
-                const engine = this.grid.cubes[y][x]?.engine as OceanEngine;
-                if (engine) {
-                    engine.params.vortexStrength = strength;
-                    engine.params.vortexRadius = radius;
-                }
-            }
-        }
+        this.vortexStrength = strength;
+        this.vortexRadius = radius;
     }
 
     /**
@@ -253,6 +249,8 @@ export class OceanWorld {
 
     // Interaction globally mapped
     public setInteraction(globalX: number, globalY: number, active: boolean) {
+        if (!active) return;
+
         const safeGx = (globalX + this.globalSizeW) % this.globalSizeW;
         const safeGy = (globalY + this.globalSizeH) % this.globalSizeH;
 
@@ -261,20 +259,12 @@ export class OceanWorld {
         const localX = safeGx % this.chunkSize;
         const localY = safeGy % this.chunkSize;
 
-        // Reset all chunks interactions first to avoid "sticky" mouse
-        for (let y = 0; y < this.rows; y++) {
-            for (let x = 0; x < this.cols; x++) {
-                const engine = this.grid.cubes[y][x]?.engine as OceanEngine;
-                if (engine) engine.interaction.active = false;
-            }
-        }
-
         const cube = this.grid.cubes[chunkY][chunkX];
         if (cube) {
-            const engine = cube.engine as OceanEngine;
-            engine.interaction.mouseX = localX;
-            engine.interaction.mouseY = localY;
-            engine.interaction.active = active;
+            HypercubeMath.injectMomentumD2Q9(
+                cube.faces, cube.nx, cube.ny, localX, localY,
+                this.vortexRadius, this.vortexStrength
+            );
         }
     }
 }

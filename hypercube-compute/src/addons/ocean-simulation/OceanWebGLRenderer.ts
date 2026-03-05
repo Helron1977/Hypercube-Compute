@@ -1,4 +1,4 @@
-import { HypercubeGrid } from '../../core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../../core/HypercubeCpuGrid';
 
 export class OceanWebGLRenderer {
     private gl: WebGL2RenderingContext;
@@ -218,7 +218,7 @@ export class OceanWebGLRenderer {
         this.gl.texSubImage2D(this.gl.TEXTURE_2D, 0, xOff, yOff, this.chunkSize, this.chunkSize, this.gl.RED, this.gl.FLOAT, data);
     }
 
-    public render(grid: HypercubeGrid) {
+    public render(grid: HypercubeCpuGrid) {
         this.gl.useProgram(this.program);
 
         // Upload each chunk into the master textures using O(1) subset uploads

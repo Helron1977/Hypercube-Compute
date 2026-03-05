@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeCpuGrid as HypercubeGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { FlowFieldEngine } from '../src/engines/FlowFieldEngine';
 

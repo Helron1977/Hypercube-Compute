@@ -1,25 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { OceanEngine } from '../src/engines/OceanEngine';
+import { HypercubeMath } from '../src/math/HypercubeMath';
 
 describe('OceanEngine Mass Conservation and Stability', () => {
 
     it('runs 2000 steps without exploding (NaN) and conserves global mass', async () => {
         const mapSize = 64; // Smaller for fast testing 2000 steps
         const totalCells = mapSize * mapSize;
-        const numFaces = 23;
-        const masterBuffer = new HypercubeMasterBuffer(totalCells * numFaces * 4);
+        const numFaces = 25;
+        const masterBuffer = new HypercubeMasterBuffer(10 * 1024 * 1024);
 
         const oceanEngine = new OceanEngine();
         oceanEngine.params.closedBounds = true; // IMPORTANT for isolated stability test
 
         // --- 1. SETUP ENGINE (CPU MODE) ---
-        const grid = await HypercubeGrid.create(
+        const grid = await HypercubeCpuGrid.create(
             1, 1, mapSize, masterBuffer,
             () => oceanEngine,
-            numFaces, false, 'cpu', false
-        );
+            numFaces, false, false);
 
         const faces = grid.cubes[0][0]?.faces!;
 
@@ -40,14 +40,10 @@ describe('OceanEngine Mass Conservation and Stability', () => {
             }
         }
 
-        // Force Vortex at the center
-        oceanEngine.interaction.active = true;
-        oceanEngine.interaction.mouseX = cx;
-        oceanEngine.interaction.mouseY = cx;
-
         // Run simulation for 2000 steps
         // The half-way bounce back and NaN clamping will be seriously stressed here.
         for (let step = 0; step < 2000; step++) {
+            HypercubeMath.injectMomentumD2Q9(faces, mapSize, mapSize, cx, cx, 28, 0.02);
             await grid.compute();
         }
 

@@ -1,6 +1,6 @@
 import { expect, test, describe, beforeAll } from 'vitest';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeGpuGrid } from '../src/core/HypercubeGpuGrid';
 import { VolumeDiffusionEngine } from '../src/engines/VolumeDiffusionEngine';
 import { HypercubeGPUContext } from '../src/core/gpu/HypercubeGPUContext';
 
@@ -26,7 +26,7 @@ describe('WebGPU Engine Validation', () => {
         }
 
         const size = 16;
-        const grid = await HypercubeGrid.create(
+        const grid = await HypercubeGpuGrid.create(
             1, 1, size,
             masterBuffer,
             () => new VolumeDiffusionEngine(0.1, 1.0),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { GameOfLifeEngine } from '../src/engines/GameOfLifeEngine';
 
@@ -9,7 +9,7 @@ describe('Game Of Life Ecosystem (New Rules)', () => {
         const mapSize = 64;
         const totalCellsStrided = mapSize * mapSize;
         const numFaces = 6;
-        const masterBuffer = new HypercubeMasterBuffer(totalCellsStrided * numFaces * 4);
+        const masterBuffer = new HypercubeMasterBuffer(10 * 1024 * 1024);
 
         const engine = new GameOfLifeEngine({
             deathProb: 0.015,
@@ -22,11 +22,10 @@ describe('Game Of Life Ecosystem (New Rules)', () => {
         });
 
         // --- 1. SETUP ENGINE (CPU MODE) ---
-        const grid = await HypercubeGrid.create(
+        const grid = await HypercubeCpuGrid.create(
             1, 1, mapSize, masterBuffer,
             () => engine,
-            numFaces, true, 'cpu', false
-        );
+            numFaces, true, false);
 
         const faces = grid.cubes[0][0]?.faces!;
 

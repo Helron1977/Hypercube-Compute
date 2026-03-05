@@ -2,9 +2,11 @@ export * from './Hypercube';
 
 // Core
 export * from './core/HypercubeChunk';
-export * from './core/HypercubeGrid';
+export * from './core/HypercubeCpuGrid';
+export * from './core/HypercubeGpuGrid';
 export * from './core/HypercubeMasterBuffer';
 export * from './core/HypercubeCompositor';
+export * from './core/cpu/BoundaryConditions';
 export * from './core/gpu/HypercubeGPUContext';
 
 // Engines
@@ -23,6 +25,7 @@ export * from './io/CanvasAdapter';
 export * from './io/WebGLAdapter';
 
 // Utils
+export * from './math/HypercubeMath';
 export * from './utils/HypercubeViz';
 export * from './utils/HypercubeIsoRenderer';
 export * from './utils/HypercubeMarchingCubes';

@@ -36,9 +36,11 @@ export class HypercubeWorkerPool {
 
     /**
      * Initialise la pool en levant N instances du worker script.
+     * Envoie également le SharedArrayBuffer une unique fois.
+     * @param sharedBuffer Le tampon mémoire principal
      * @param workerScriptPath Le chemin relatif vers le script worker pré-compilé
      */
-    async init(workerScriptPath: string = './cpu.worker.js'): Promise<void> {
+    async init(sharedBuffer: SharedArrayBuffer, workerScriptPath: string = './cpu.worker.js'): Promise<void> {
         return new Promise((resolve) => {
             let initialized = 0;
             const onWorkerInit = () => {
@@ -51,10 +53,17 @@ export class HypercubeWorkerPool {
                 worker.onmessage = (e: MessageEvent<HypercubeWorkerMessage>) => {
                     if (e.data.type === 'DONE') {
                         // Traité plus loin dans le dispatcher
+                    } else if (e.data.type === 'INIT') {
+                        onWorkerInit();
                     }
                 };
+
+                worker.postMessage({
+                    type: 'INIT',
+                    sharedBuffer: sharedBuffer
+                } as HypercubeWorkerMessage);
+
                 this.workers.push(worker);
-                onWorkerInit(); // TODO: Attendre confirmation asynchrone du worker si nécessaire
             }
         });
     }
@@ -120,7 +129,6 @@ export class HypercubeWorkerPool {
                         nz: cube.nz,
                         engineName: engineParams.name,
                         engineConfig: cfg,
-                        sharedBuffer: sharedBuffer,
                         chunkX: cube.x,
                         chunkY: cube.y
                     } as HypercubeWorkerMessage);

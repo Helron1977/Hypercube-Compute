@@ -43,6 +43,10 @@ export class EngineRegistry {
     public static applyConfig(engine: IHypercubeEngine, config: any) {
         if (!config || typeof config !== 'object') return;
 
+        if (config.boundaryConfig !== undefined && typeof engine.setBoundaryConfig === 'function') {
+            engine.setBoundaryConfig(config.boundaryConfig);
+        }
+
         // Cas particulier OceanEngine qui encapsule sa config dans 'params'
         if (engine.name === 'OceanEngine') {
             (engine as any).params = { ...(engine as any).params, ...config };
@@ -51,7 +55,9 @@ export class EngineRegistry {
 
         // Cas général : fusion directe (ex: Aerodynamics, Heatmap)
         for (const key of Object.keys(config)) {
-            (engine as any)[key] = config[key];
+            if (key !== 'boundaryConfig') {
+                (engine as any)[key] = config[key];
+            }
         }
     }
 }

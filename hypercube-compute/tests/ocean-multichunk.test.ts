@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { OceanEngine } from '../src/engines/OceanEngine';
 
@@ -11,13 +11,13 @@ describe('OceanEngine Multi-Chunk (Grid 2x2 Boundary Exchange)', () => {
         const numChunksY = 2;
         const mapSize = 32; // MapSize per chunk
         const totalCellsStrided = mapSize * mapSize * numChunksX * numChunksY;
-        const numFaces = 23;
-        const masterBuffer = new HypercubeMasterBuffer(totalCellsStrided * numFaces * 4);
+        const numFaces = 25;
+        const masterBuffer = new HypercubeMasterBuffer(10 * 1024 * 1024);
 
         const oceanEngine = new OceanEngine();
 
         // --- 1. SETUP ENGINE (CPU MODE) MULTI-CHUNK ---
-        const grid = await HypercubeGrid.create(
+        const grid = await HypercubeCpuGrid.create(
             numChunksX, numChunksY, mapSize, masterBuffer,
             () => oceanEngine,
             numFaces, true, 'cpu', false // isPeriodic = true
@@ -30,7 +30,7 @@ describe('OceanEngine Multi-Chunk (Grid 2x2 Boundary Exchange)', () => {
             for (let cx = 0; cx < numChunksX; cx++) {
                 const faces = grid.cubes[cy][cx]?.faces!;
                 for (let i = 0; i < mapSize * mapSize; i++) {
-                    faces[20][i] = 1.0;          // rho
+                    faces[22][i] = 1.0;          // rho
                     for (let k = 0; k < 9; k++) {
                         faces[k][i] = w[k] * 1.0;
                     }
@@ -39,9 +39,12 @@ describe('OceanEngine Multi-Chunk (Grid 2x2 Boundary Exchange)', () => {
         }
 
         // Apply forcing to create macro movement across chunk seams
-        oceanEngine.interaction.active = true;
-        oceanEngine.interaction.mouseX = 32; // Exactly at boundary
-        oceanEngine.interaction.mouseY = 32;
+        const facesCenter = grid.cubes[0][0]?.faces!;
+        // Inject velocity to create a disturbance
+        for (let i = 0; i < mapSize * mapSize; i++) {
+            if (i % 5 === 0) facesCenter[19][i] = 0.1; // ux
+            if (i % 7 === 0) facesCenter[20][i] = -0.1; // uy
+        }
 
         let totalMassStart = 0;
         for (let cy = 0; cy < numChunksY; cy++) {
@@ -49,7 +52,7 @@ describe('OceanEngine Multi-Chunk (Grid 2x2 Boundary Exchange)', () => {
                 const faces = grid.cubes[cy][cx]?.faces!;
                 for (let y = 1; y < mapSize - 1; y++) {
                     for (let x = 1; x < mapSize - 1; x++) {
-                        totalMassStart += faces[20][y * mapSize + x];
+                        totalMassStart += faces[22][y * mapSize + x];
                     }
                 }
             }
@@ -67,7 +70,7 @@ describe('OceanEngine Multi-Chunk (Grid 2x2 Boundary Exchange)', () => {
                 const faces = grid.cubes[cy][cx]?.faces!;
                 for (let y = 1; y < mapSize - 1; y++) {
                     for (let x = 1; x < mapSize - 1; x++) {
-                        totalMassEnd += faces[20][y * mapSize + x];
+                        totalMassEnd += faces[22][y * mapSize + x];
                     }
                 }
             }

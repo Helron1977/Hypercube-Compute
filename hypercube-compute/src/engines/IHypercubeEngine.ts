@@ -53,6 +53,11 @@ export interface IHypercubeEngine {
     getConfig?(): Record<string, any>;
 
     /**
+     * @description Permet au contrôleur (Grid) de propager la configuration des conditions aux limites à l'Engine.
+     */
+    setBoundaryConfig?(config: any): void;
+
+    /**
      * Code source WGSL (Compute Shader) optionnel pour l'exécution sur GPU.
      */
     readonly wgslSource?: string;

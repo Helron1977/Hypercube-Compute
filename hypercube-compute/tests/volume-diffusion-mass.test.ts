@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HypercubeGrid } from '../src/core/HypercubeGrid';
+import { HypercubeCpuGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { VolumeDiffusionEngine } from '../src/engines/VolumeDiffusionEngine';
 import { HypercubeViz } from '../src/utils/HypercubeViz';
@@ -8,14 +8,13 @@ describe('VolumeDiffusionEngine Mass Conservation', () => {
     it('should perfectly conserve mass over time in periodic boundary conditions', async () => {
         const mapSize = 16;
         const totalCells = mapSize * mapSize * mapSize;
-        const masterBuffer = new HypercubeMasterBuffer(totalCells * 2 * 4); // 2 faces, 4 bytes per float
+        const masterBuffer = new HypercubeMasterBuffer(10 * 1024 * 1024);
 
         // Diffusion rate = 0.1, dt = 1.0, periodic boundaries
-        const grid = await HypercubeGrid.create(
+        const grid = await HypercubeCpuGrid.create(
             1, 1, mapSize, masterBuffer,
             () => new VolumeDiffusionEngine(0.1, 1.0, 'periodic'),
-            2, false, 'cpu', false
-        );
+            2, false, false);
 
         const chunk = grid.cubes[0][0]!;
 

@@ -6,8 +6,6 @@ export interface OceanEngineParams {
     cflLimit: number;
     bioDiffusion: number;
     bioGrowth: number;
-    vortexRadius: number;
-    vortexStrength: number;
     closedBounds: boolean;
 }
 
@@ -58,8 +56,6 @@ export class OceanEngine implements IHypercubeEngine {
         cflLimit: 0.38,
         bioDiffusion: 0.05,
         bioGrowth: 0.0005,
-        vortexRadius: 28,
-        vortexStrength: 0.02,
         closedBounds: false
     };
 
@@ -67,13 +63,6 @@ export class OceanEngine implements IHypercubeEngine {
         maxU: 0,
         avgTau: 0,
         avgRho: 0
-    };
-
-    // UI Input simulation (will be fed by the high-level framework/addon)
-    public interaction = {
-        mouseX: 0,
-        mouseY: 0,
-        active: false
     };
 
     constructor() { }
@@ -111,25 +100,7 @@ export class OceanEngine implements IHypercubeEngine {
         }
     }
 
-    public addGlobalCurrent(faces: Float32Array[], targetUx: number, targetUy: number): void {
-        const nx = 256; // Fallback size, ideally should get nx/ny
-        const ny = 256;
-        const ux = faces[19];
-        const uy = faces[20];
-        for (let i = 0; i < nx * ny; i++) {
-            ux[i] += targetUx;
-            uy[i] += targetUy;
-        }
-    }
 
-    public addVortex(faces: Float32Array[], mx: number, my: number, strength: number = 10.0): void {
-        this.interaction.mouseX = mx;
-        this.interaction.mouseY = my;
-        this.interaction.active = true;
-
-        // Disable after a frame to simulate impulse
-        setTimeout(() => { this.interaction.active = false; }, 50);
-    }
 
     /**
      * Entry point: Orchestrates LBM and Bio steps
@@ -156,10 +127,10 @@ export class OceanEngine implements IHypercubeEngine {
             for (let i = 0; i < nx * ny; i++) faces[k + 9][zOff + i] = 0;
         }
 
-        const mx = this.interaction.mouseX;
-        const my = this.interaction.mouseY;
-        const isForcing = this.interaction.active;
-        const vr2 = this.params.vortexRadius * this.params.vortexRadius;
+        const out0 = faces[9], out1 = faces[10], out2 = faces[11], out3 = faces[12], out4 = faces[13], out5 = faces[14], out6 = faces[15], out7 = faces[16], out8 = faces[17];
+        const in0 = faces[0], in1 = faces[1], in2 = faces[2], in3 = faces[3], in4 = faces[4], in5 = faces[5], in6 = faces[6], in7 = faces[7], in8 = faces[8];
+        const cx_w = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
+        const isClosed = this.params.closedBounds;
 
         // 1. PULL-STREAMING, MACROS & COLLISION (O1 Optimized)
         for (let y = 1; y < ny - 1; y++) {
@@ -167,61 +138,57 @@ export class OceanEngine implements IHypercubeEngine {
                 const i = zOff + y * nx + x;
 
                 if (obst[i] > 0.5) {
-                    for (let k = 0; k < 9; k++) faces[k + 9][i] = this.w[k];
+                    out0[i] = cx_w[0]; out1[i] = cx_w[1]; out2[i] = cx_w[2];
+                    out3[i] = cx_w[3]; out4[i] = cx_w[4]; out5[i] = cx_w[5];
+                    out6[i] = cx_w[6]; out7[i] = cx_w[7]; out8[i] = cx_w[8];
                     continue;
                 }
 
-                // --- PULL STREAMING ---
-                let r = 0, vx = 0, vy = 0;
+                // --- PULL STREAMING UNROLLED ---
+                let pf0 = in0[i];
+                let pf1: number, pf2: number, pf3: number, pf4: number, pf5: number, pf6: number, pf7: number, pf8: number;
 
-                for (let k = 0; k < 9; k++) {
-                    const local_nx = x - this.cx[k];
-                    const local_ny = y - this.cy[k];
+                // Dir 1 (cx:1, cy:0) opp:3
+                let nx1 = x - 1, ny1 = y;
+                if (isClosed && nx1 <= 0) pf1 = in3[i]; else { let ni = zOff + ny1 * nx + nx1; pf1 = obst[ni] > 0.5 ? in3[i] : in1[ni]; }
+                // Dir 2 (cx:0, cy:1) opp:4
+                let nx2 = x, ny2 = y - 1;
+                if (isClosed && ny2 <= 0) pf2 = in4[i]; else { let ni = zOff + ny2 * nx + nx2; pf2 = obst[ni] > 0.5 ? in4[i] : in2[ni]; }
+                // Dir 3 (cx:-1, cy:0) opp:1
+                let nx3 = x + 1, ny3 = y;
+                if (isClosed && nx3 >= nx - 1) pf3 = in1[i]; else { let ni = zOff + ny3 * nx + nx3; pf3 = obst[ni] > 0.5 ? in1[i] : in3[ni]; }
+                // Dir 4 (cx:0, cy:-1) opp:2
+                let nx4 = x, ny4 = y + 1;
+                if (isClosed && ny4 >= ny - 1) pf4 = in2[i]; else { let ni = zOff + ny4 * nx + nx4; pf4 = obst[ni] > 0.5 ? in2[i] : in4[ni]; }
+                // Dir 5 (cx:1, cy:1) opp:7
+                let nx5 = x - 1, ny5 = y - 1;
+                if (isClosed && (nx5 <= 0 || ny5 <= 0)) pf5 = in7[i]; else { let ni = zOff + ny5 * nx + nx5; pf5 = obst[ni] > 0.5 ? in7[i] : in5[ni]; }
+                // Dir 6 (cx:-1, cy:1) opp:8
+                let nx6 = x + 1, ny6 = y - 1;
+                if (isClosed && (nx6 >= nx - 1 || ny6 <= 0)) pf6 = in8[i]; else { let ni = zOff + ny6 * nx + nx6; pf6 = obst[ni] > 0.5 ? in8[i] : in6[ni]; }
+                // Dir 7 (cx:-1, cy:-1) opp:5
+                let nx7 = x + 1, ny7 = y + 1;
+                if (isClosed && (nx7 >= nx - 1 || ny7 >= ny - 1)) pf7 = in5[i]; else { let ni = zOff + ny7 * nx + nx7; pf7 = obst[ni] > 0.5 ? in5[i] : in7[ni]; }
+                // Dir 8 (cx:1, cy:-1) opp:6
+                let nx8 = x - 1, ny8 = y + 1;
+                if (isClosed && (nx8 <= 0 || ny8 >= ny - 1)) pf8 = in6[i]; else { let ni = zOff + ny8 * nx + nx8; pf8 = obst[ni] > 0.5 ? in6[i] : in8[ni]; }
 
-                    if (this.params.closedBounds && (local_nx <= 0 || local_nx >= nx - 1 || local_ny <= 0 || local_ny >= ny - 1)) {
-                        this.pulled_f[k] = faces[this.opp[k]][i];
-                    } else {
-                        const ni = zOff + local_ny * nx + local_nx;
-                        if (obst[ni] > 0.5) {
-                            this.pulled_f[k] = faces[this.opp[k]][i];
-                        } else {
-                            this.pulled_f[k] = faces[k][ni];
-                        }
-                    }
-
-                    r += this.pulled_f[k];
-                    vx += this.pulled_f[k] * this.cx[k];
-                    vy += this.pulled_f[k] * this.cy[k];
-                }
+                let r = pf0 + pf1 + pf2 + pf3 + pf4 + pf5 + pf6 + pf7 + pf8;
+                let vx = (pf1 + pf5 + pf8) - (pf3 + pf6 + pf7);
+                let vy = (pf2 + pf5 + pf6) - (pf4 + pf7 + pf8);
 
                 // Stability Clamping
                 let isShockwave = false;
                 if (r < 0.8 || r > 1.2 || r < 0.0001) {
                     const targetRho = Math.max(0.8, Math.min(1.2, r < 0.0001 ? 1.0 : r));
                     const scale = targetRho / r;
-                    for (let k = 0; k < 9; k++) this.pulled_f[k] *= scale;
+                    pf0 *= scale; pf1 *= scale; pf2 *= scale; pf3 *= scale; pf4 *= scale;
+                    pf5 *= scale; pf6 *= scale; pf7 *= scale; pf8 *= scale;
                     r = targetRho;
                     isShockwave = true;
                 }
 
-                vx /= r;
-                vy /= r;
-
-                // Vortex Forcing
-                let Fx = 0;
-                let Fy = 0;
-                if (isForcing) {
-                    const dx = x - mx;
-                    const dy = y - my;
-                    const dist2 = dx * dx + dy * dy;
-                    if (dist2 < vr2) {
-                        const forceScale = this.params.vortexStrength * 0.005 * (1.0 - Math.sqrt(dist2) / this.params.vortexRadius);
-                        Fx = -dy * forceScale;
-                        Fy = dx * forceScale;
-                        vx += Fx / r;
-                        vy += Fy / r;
-                    }
-                }
+                vx /= r; vy /= r;
 
                 const v2 = vx * vx + vy * vy;
                 const speed = Math.sqrt(v2);
@@ -230,33 +197,38 @@ export class OceanEngine implements IHypercubeEngine {
                 let u2_clamped = v2;
                 if (speed > this.params.cflLimit) {
                     const scale = this.params.cflLimit / speed;
-                    vx *= scale;
-                    vy *= scale;
+                    vx *= scale; vy *= scale;
                     u2_clamped = vx * vx + vy * vy;
                     isShockwave = true;
                 }
 
-                // Store Macros
-                rho[i] = r;
-                ux[i] = vx;
-                uy[i] = vy;
+                rho[i] = r; ux[i] = vx; uy[i] = vy;
 
-                // --- COLLISION ---
+                const u2_15 = 1.5 * u2_clamped;
+
+                let feq0 = cx_w[0] * r * (1.0 - u2_15);
+                let feq1 = cx_w[1] * r * (1.0 + 3.0 * vx + 4.5 * vx * vx - u2_15);
+                let feq2 = cx_w[2] * r * (1.0 + 3.0 * vy + 4.5 * vy * vy - u2_15);
+                let feq3 = cx_w[3] * r * (1.0 - 3.0 * vx + 4.5 * vx * vx - u2_15);
+                let feq4 = cx_w[4] * r * (1.0 - 3.0 * vy + 4.5 * vy * vy - u2_15);
+
+                let cu5 = vx + vy; let feq5 = cx_w[5] * r * (1.0 + 3.0 * cu5 + 4.5 * cu5 * cu5 - u2_15);
+                let cu6 = -vx + vy; let feq6 = cx_w[6] * r * (1.0 + 3.0 * cu6 + 4.5 * cu6 * cu6 - u2_15);
+                let cu7 = -vx - vy; let feq7 = cx_w[7] * r * (1.0 + 3.0 * cu7 + 4.5 * cu7 * cu7 - u2_15);
+                let cu8 = vx - vy; let feq8 = cx_w[8] * r * (1.0 + 3.0 * cu8 + 4.5 * cu8 * cu8 - u2_15);
+
                 if (isShockwave) {
-                    for (let k = 0; k < 9; k++) {
-                        const cu = 3 * (this.cx[k] * vx + this.cy[k] * vy);
-                        faces[k + 9][i] = this.w[k] * r * (1 + cu + 0.5 * cu * cu - 1.5 * u2_clamped);
-                    }
+                    out0[i] = feq0; out1[i] = feq1; out2[i] = feq2; out3[i] = feq3; out4[i] = feq4;
+                    out5[i] = feq5; out6[i] = feq6; out7[i] = feq7; out8[i] = feq8;
                 } else {
-                    let Pxx = 0, Pyy = 0, Pxy = 0;
-                    for (let k = 0; k < 9; k++) {
-                        const cu = 3 * (this.cx[k] * vx + this.cy[k] * vy);
-                        this.feq_cache[k] = this.w[k] * r * (1 + cu + 0.5 * cu * cu - 1.5 * u2_clamped);
-                        const fneq = this.pulled_f[k] - this.feq_cache[k];
-                        Pxx += fneq * this.cx[k] * this.cx[k];
-                        Pyy += fneq * this.cy[k] * this.cy[k];
-                        Pxy += fneq * this.cx[k] * this.cy[k];
-                    }
+                    let fneq1 = pf1 - feq1; let fneq2 = pf2 - feq2;
+                    let fneq3 = pf3 - feq3; let fneq4 = pf4 - feq4;
+                    let fneq5 = pf5 - feq5; let fneq6 = pf6 - feq6;
+                    let fneq7 = pf7 - feq7; let fneq8 = pf8 - feq8;
+
+                    let Pxx = fneq1 + fneq3 + fneq5 + fneq6 + fneq7 + fneq8;
+                    let Pyy = fneq2 + fneq4 + fneq5 + fneq6 + fneq7 + fneq8;
+                    let Pxy = fneq5 - fneq6 + fneq7 - fneq8;
 
                     let S_norm = Math.sqrt(2 * (Pxx * Pxx + Pyy * Pyy + 2 * Pxy * Pxy));
                     if (S_norm > 10.0 || isNaN(S_norm)) S_norm = 10.0;
@@ -268,9 +240,16 @@ export class OceanEngine implements IHypercubeEngine {
                     sumRho += r;
                     activeCells++;
 
-                    for (let k = 0; k < 9; k++) {
-                        faces[k + 9][i] = this.pulled_f[k] - (this.pulled_f[k] - this.feq_cache[k]) / tau_eff;
-                    }
+                    let inv_tau = 1.0 / tau_eff;
+                    out0[i] = pf0 - (pf0 - feq0) * inv_tau;
+                    out1[i] = pf1 - fneq1 * inv_tau;
+                    out2[i] = pf2 - fneq2 * inv_tau;
+                    out3[i] = pf3 - fneq3 * inv_tau;
+                    out4[i] = pf4 - fneq4 * inv_tau;
+                    out5[i] = pf5 - fneq5 * inv_tau;
+                    out6[i] = pf6 - fneq6 * inv_tau;
+                    out7[i] = pf7 - fneq7 * inv_tau;
+                    out8[i] = pf8 - fneq8 * inv_tau;
                 }
             }
         }
