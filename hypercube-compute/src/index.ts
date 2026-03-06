@@ -23,6 +23,7 @@ export * from './engines/VolumeDiffusionEngine'; // Premier moteur 3D natif V4
 // IO / Adapters
 export * from './io/CanvasAdapter';
 export * from './io/WebGLAdapter';
+export * from './io/HypercubeGpuVolumeRenderer';
 
 // Utils
 export * from './math/HypercubeMath';

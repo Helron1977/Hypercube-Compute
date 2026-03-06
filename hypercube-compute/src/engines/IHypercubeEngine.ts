@@ -95,6 +95,10 @@ export interface IHypercubeEngine {
      * @param writeBuffer Buffer destination (Frame N+1)
      */
     computeGPU?(device: GPUDevice, commandEncoder: GPUCommandEncoder, nx: number, ny: number, nz: number, readBuffer: GPUBuffer, writeBuffer: GPUBuffer): void;
+    /**
+     * @description Identifie les capacités et caractéristiques du moteur pour le rendu automatique.
+     */
+    getTags?(): string[];
 }
 
 

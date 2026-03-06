@@ -20,11 +20,12 @@ export class CanvasAdapter {
         rows: number,
         options: {
             faceIndex: number,
-            colormap: 'grayscale' | 'heatmap' | 'vorticity' | 'ocean',
+            colormap: 'grayscale' | 'heatmap' | 'vorticity' | 'ocean' | 'arctic',
             minVal?: number,
             maxVal?: number,
             sliceZ?: number,
-            obstaclesFace?: number
+            obstaclesFace?: number,
+            vorticityFace?: number
         }
     ) {
         const sliceZ = options.sliceZ || 0;
@@ -73,18 +74,57 @@ export class CanvasAdapter {
                             pixelData[dstIdx] = v * 255;
                             pixelData[dstIdx + 1] = v > 0.5 ? (v - 0.5) * 510 : 0;
                             pixelData[dstIdx + 2] = v * 50;
-                        } else if (options.colormap === 'vorticity') {
-                            // -1 to 1 range mapping
-                            const norm = (data[srcIdx] - minV) / (maxV - minV);
-                            const vn = Math.max(0, Math.min(1, norm));
-                            pixelData[dstIdx] = vn > 0.5 ? (vn - 0.5) * 510 : 0;
-                            pixelData[dstIdx + 1] = vn * 255;
-                            pixelData[dstIdx + 2] = vn < 0.5 ? (0.5 - vn) * 510 : 0;
+                        } else if (options.colormap === 'ocean') {
+                            const intensity = (v - 0.5) * 8.0;
+                            pixelData[dstIdx] = Math.max(0, Math.min(255, 25 + intensity * 200));
+                            pixelData[dstIdx + 1] = Math.max(0, Math.min(255, 100 + intensity * 155));
+                            pixelData[dstIdx + 2] = Math.max(0, Math.min(255, 200 + intensity * 55));
+                        } else if (options.colormap === 'arctic') {
+                            // SCIENTIFIC COMPOSITE: Background(Light Blue) -> Smoke(Navy) -> Vorticity(Red)
+                            const s = Math.max(0, Math.min(1.0, (data[srcIdx] - minV) / range));
+
+                            // 1. BASE: Light Blue
+                            let r = 160, g = 200, b = 255;
+
+                            // 2. SMOKE: Blend to Navy Blue (10, 20, 60)
+                            const rN = 10, gN = 25, bN = 70;
+                            const tS = Math.pow(s, 0.6); // Slightly bias towards visibility
+                            r = r * (1 - tS) + rN * tS;
+                            g = g * (1 - tS) + gN * tS;
+                            b = b * (1 - tS) + bN * tS;
+
+                            // 3. CONVOLUTIONS: Pure Red Highlights (Chirurgical Detail)
+                            // Multiplier is now sane (30x) and linear
+                            if (options.vorticityFace !== undefined) {
+                                const vData = faces[options.vorticityFace];
+                                const vMag = Math.min(1.0, Math.abs(vData[srcIdx]) * 30.0);
+
+                                if (vMag > 0.15) { // Only the eye of the hurricane
+                                    const t = (vMag - 0.15) * 1.2;
+                                    const tC = Math.min(1.0, t);
+                                    r = r * (1 - tC) + 255 * tC;
+                                    g = g * (1 - tC);
+                                    b = b * (1 - tC);
+                                }
+                            }
+
+                            pixelData[dstIdx] = r;
+                            pixelData[dstIdx + 1] = g;
+                            pixelData[dstIdx + 2] = b;
                         } else {
                             const c = v * 255;
-                            pixelData[dstIdx] = c;
-                            pixelData[dstIdx + 1] = c;
-                            pixelData[dstIdx + 2] = c;
+                            const isArctic = (options.colormap as any) === 'arctic';
+                            if (isArctic || options.colormap === undefined) {
+                                // Fallback to arctic for Aerodynamics if not specified
+                                // Simple gray for basics, but this block is reached only if not heatmap/ocean/arctic
+                                pixelData[dstIdx] = c;
+                                pixelData[dstIdx + 1] = c;
+                                pixelData[dstIdx + 2] = c;
+                            } else {
+                                pixelData[dstIdx] = c;
+                                pixelData[dstIdx + 1] = c;
+                                pixelData[dstIdx + 2] = c;
+                            }
                         }
 
                         pixelData[dstIdx + 3] = 255;

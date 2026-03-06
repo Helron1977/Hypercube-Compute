@@ -118,8 +118,19 @@ export class HypercubeCpuGrid {
                 grid.workerPool = null;
             }
         }
-
         return grid;
+    }
+
+    /**
+     * Pushes all CPU data (obstacles, initial states) from all chunks to GPU VRAM.
+     */
+    public pushToGPU() {
+        if (this.mode !== 'gpu') return;
+        for (let y = 0; y < this.rows; y++) {
+            for (let x = 0; x < this.cols; x++) {
+                this.cubes[y][x]?.pushToGPU();
+            }
+        }
     }
 
     /**
@@ -250,8 +261,7 @@ export class HypercubeCpuGrid {
         }
 
         // --- GLOBAL PARITY TOGGLE ---
-        // Must happen AFTER all compute and sync steps
-        // ── GPU REFACTO V5.4 ── Skip if GPU (already handled above)
+        // Must happen AFTER all compute and sync steps to prepare the NEXT frame.
         if (this.mode !== 'gpu') {
             for (let y = 0; y < this.rows; y++) {
                 for (let x = 0; x < this.cols; x++) {
@@ -453,9 +463,10 @@ export class HypercubeCpuGrid {
                     const botCube = this.cubes[(y + 1) % this.rows][x]!;
                     const botData = botCube.faces[f];
                     for (let lz = 0; lz < nz; lz++) {
-                        const srcOffset = lz * ny * nx + (ny - 2) * nx + 1;
-                        const dstOffset = lz * ny * nx + 1;
-                        botData.set(data.subarray(srcOffset, srcOffset + nx - 2), dstOffset);
+                        const srcOffset = lz * ny * nx + (ny - 2) * nx;
+                        const dstOffset = lz * ny * nx;
+                        // Sync full row coverage (0 to nx-1)
+                        botData.set(data.subarray(srcOffset, srcOffset + nx), dstOffset);
                     }
                 }
 
@@ -464,9 +475,9 @@ export class HypercubeCpuGrid {
                     const topCube = this.cubes[topRow][x]!;
                     const topData = topCube.faces[f];
                     for (let lz = 0; lz < nz; lz++) {
-                        const srcOffset = lz * ny * nx + nx + 1;
-                        const dstOffset = lz * ny * nx + (ny - 1) * nx + 1;
-                        topData.set(data.subarray(srcOffset, srcOffset + nx - 2), dstOffset);
+                        const srcOffset = lz * ny * nx + nx;
+                        const dstOffset = lz * ny * nx + (ny - 1) * nx;
+                        topData.set(data.subarray(srcOffset, srcOffset + nx), dstOffset);
                     }
                 }
             }
@@ -488,28 +499,20 @@ export class HypercubeCpuGrid {
                 const bI = (y + 1) % this.rows;
                 const tI = (y - 1 + this.rows) % this.rows;
 
-                // Active corners (Source)
-                const myTL = nx + 1;
-                const myTR = nx + nx - 2;
-                const myBL = (ny - 2) * nx + 1;
-                const myBR = (ny - 2) * nx + nx - 2;
-
-                // Ghost offsets in neighbors (Target)
-                const targetTL = 0;
-                const targetTR = nx - 1;
-                const targetBL = (ny - 1) * nx;
-                const targetBR = (ny - 1) * nx + nx - 1;
-
                 for (let lz = 0; lz < nz; lz++) {
                     const zOff = lz * ny * nx;
-                    // Sent to Top-Left Neighbor's Bottom-Right Ghost
-                    if (hasT && hasL) this.cubes[tI][lI]!.faces[f][zOff + targetBR] = data[zOff + myTL];
-                    // Sent to Top-Right Neighbor's Bottom-Left Ghost
-                    if (hasT && hasR) this.cubes[tI][rI]!.faces[f][zOff + targetBL] = data[zOff + myTR];
-                    // Sent to Bottom-Left Neighbor's Top-Right Ghost
-                    if (hasB && hasL) this.cubes[bI][lI]!.faces[f][zOff + targetTR] = data[zOff + myBL];
-                    // Sent to Bottom-Right Neighbor's Top-Left Ghost
-                    if (hasB && hasR) this.cubes[bI][rI]!.faces[f][zOff + targetTL] = data[zOff + myBR];
+
+                    // BR (nx-2, ny-2) -> Bottom-Right Neighbor's TL Ghost (0,0)
+                    if (hasB && hasR) this.cubes[bI][rI]!.faces[f][zOff] = data[zOff + (ny - 2) * nx + nx - 2];
+
+                    // BL (1, ny-2) -> Bottom-Left Neighbor's TR Ghost (nx-1, 0)
+                    if (hasB && hasL) this.cubes[bI][lI]!.faces[f][zOff + nx - 1] = data[zOff + (ny - 2) * nx + 1];
+
+                    // TR (nx-2, 1) -> Top-Right Neighbor's BL Ghost (0, ny-1)
+                    if (hasT && hasR) this.cubes[tI][rI]!.faces[f][zOff + (ny - 1) * nx] = data[zOff + nx + nx - 2];
+
+                    // TL (1, 1) -> Top-Left Neighbor's BR Ghost (nx-1, ny-1)
+                    if (hasT && hasL) this.cubes[tI][lI]!.faces[f][zOff + (ny - 1) * nx + nx - 1] = data[zOff + nx + 1];
                 }
             }
         }

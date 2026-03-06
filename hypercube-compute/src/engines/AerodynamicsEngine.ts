@@ -9,7 +9,7 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     private lastNx: number = 256;
     private lastNy: number = 256;
     public boundaryConfig: any = null;
-    private readonly cx = [0, 1, 0, -1, 0, -1, -1, 1, 1]; // Corrected order if needed, but matched with Ocean for consistency
+    private readonly cx = [0, 1, 0, -1, 0, 1, -1, -1, 1]; // E, N, W, S, NE, NW, SW, SE
     private readonly cy = [0, 0, 1, 0, -1, 1, 1, -1, -1];
     private readonly w = [4.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0, 1.0 / 36.0];
 
@@ -20,17 +20,18 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     private parity: number = 0;
     public gpuEnabled: boolean = false;
 
-    public get name(): string {
-        return "Aerodynamics LBM D2Q9";
-    }
+    public get name(): string { return "AerodynamicsEngine LBM D2Q9"; }
+    public getTags(): string[] { return ['aerodynamics', '2d', 'arctic', 'lbm']; }
 
     public getRequiredFaces(): number {
-        return 23; // 9(fi) + 9(f_post) + 1(obstacles) + 3(ux, uy, curl) + 1(smoke)
+        // (9 pops P0 + 9 pops P1) + (obs, ux, uy, curl, smoke P0, smoke P1)
+        return 24;
     }
 
     public getConfig(): Record<string, any> {
         return {
-            boundaryConfig: this.boundaryConfig
+            boundaryConfig: this.boundaryConfig,
+            parity: (this as any).parity || 0
         };
     }
 
@@ -39,7 +40,15 @@ export class AerodynamicsEngine implements IHypercubeEngine {
     }
 
     public getSyncFaces(): number[] {
-        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 22]; // Sync LBM pops + macros + smoke
+        const p = (this as any).parity ?? 0;
+        const outOffset = (1 - p) * 9;
+        const smokeOutIdx = 22 + (1 - p);
+
+        return [
+            outOffset + 0, outOffset + 1, outOffset + 2, outOffset + 3, outOffset + 4,
+            outOffset + 5, outOffset + 6, outOffset + 7, outOffset + 8,
+            18, 19, 20, 21, smokeOutIdx
+        ];
     }
 
     public getEquilibrium(rho: number, ux: number, uy: number): Float32Array {
@@ -59,13 +68,15 @@ export class AerodynamicsEngine implements IHypercubeEngine {
         for (let idx = 0; idx < nx * ny * nz; idx++) {
             const rho = 1.0;
             const ux = u0; const uy = 0.0;
-            const u_sq = ux * ux + uy * uy;
+            const u_sq_15 = 1.5 * (ux * ux + uy * uy);
             for (let i = 0; i < 9; i++) {
                 const cu = this.cx[i] * ux + this.cy[i] * uy;
-                const feq = this.w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u_sq);
+                const feq = this.w[i] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
                 faces[i][idx] = feq;
                 faces[i + 9][idx] = feq;
             }
+            faces[22][idx] = 0; // Smoke 0
+            faces[23][idx] = 0; // Smoke 1
         }
     }
 
@@ -172,187 +183,147 @@ export class AerodynamicsEngine implements IHypercubeEngine {
             1.0 / 36.0         // c8 (1,-1)
         ];
 
-        const f0_arr = faces[0], f1_arr = faces[1], f2_arr = faces[2], f3_arr = faces[3], f4_arr = faces[4];
-        const f5_arr = faces[5], f6_arr = faces[6], f7_arr = faces[7], f8_arr = faces[8];
-        const out0 = faces[9], out1 = faces[10], out2 = faces[11], out3 = faces[12], out4 = faces[13];
-        const out5 = faces[14], out6 = faces[15], out7 = faces[16], out8 = faces[17];
+        // const f0_arr = faces[0], f1_arr = faces[1], f2_arr = faces[2], f3_arr = faces[3], f4_arr = faces[4];
+        // const f5_arr = faces[5], f6_arr = faces[6], f7_arr = faces[7], f8_arr = faces[8];
+        // const out0 = faces[9], out1 = faces[10], out2 = faces[11], out3 = faces[12], out4 = faces[13];
+        // const out5 = faces[14], out6 = faces[15], out7 = faces[16], out8 = faces[17];
 
-        const u0 = 0.12;
-        const omega = 1.95;
+        if (this.parity === undefined) (this as any).parity = 0;
+        const parity = (this as any).parity;
+        const nextParity = 1 - parity;
 
-        let frameDrag = 0;
+        const offsetIn = parity * 9;
+        const offsetOut = nextParity * 9;
+
+        const f_in = [
+            faces[offsetIn + 0], faces[offsetIn + 1], faces[offsetIn + 2], faces[offsetIn + 3], faces[offsetIn + 4],
+            faces[offsetIn + 5], faces[offsetIn + 6], faces[offsetIn + 7], faces[offsetIn + 8]
+        ];
+        const f_out = [
+            faces[offsetOut + 0], faces[offsetOut + 1], faces[offsetOut + 2], faces[offsetOut + 3], faces[offsetOut + 4],
+            faces[offsetOut + 5], faces[offsetOut + 6], faces[offsetOut + 7], faces[offsetOut + 8]
+        ];
+        const omega = 1.75;
 
         for (let lz = 0; lz < nz; lz++) {
             const zOff = lz * ny * nx;
 
-            // 1. PULL-STREAMING, MACROS & COLLISION (O1 Optimized)
+            // 1. PULL-STREAMING, MACROS & COLLISION
             for (let y = 1; y < ny - 1; y++) {
                 for (let x = 1; x < nx - 1; x++) {
                     const i = zOff + y * nx + x;
 
-                    if (obstacles[i] > 0) {
+                    if (obstacles[i] > 0.5) {
                         ux_out[i] = 0;
                         uy_out[i] = 0;
+                        // Stationary equilibrium for obstacles
+                        for (let k = 0; k < 9; k++) f_out[k][i] = cx_w[k];
                         continue;
                     }
-                    // --- BOUNDARY CONDITIONS (Config Driven) ---
+
+                    // --- BOUNDARY CONDITIONS ---
                     const config = this.boundaryConfig;
                     if (config) {
-                        // Left Inflow
                         if (config.isLeftBoundary && x === 1 && config.left === 'INFLOW') {
-                            const inUx = config.inflowUx ?? 0.12;
-                            const inUy = config.inflowUy ?? 0.0;
+                            let scale = 1.0;
+                            if (config.isTopBoundary && y < 16) scale = y / 16.0;
+                            if (config.isBottomBoundary && y > ny - 17) scale = (ny - 1 - y) / 16.0;
+
+                            const inUx = (config.inflowUx ?? 0.12) * scale;
+                            const inUy = (config.inflowUy ?? 0.0) * scale;
                             const inRho = config.inflowDensity ?? 1.0;
 
                             ux_out[i] = inUx;
                             uy_out[i] = inUy;
-                            const u_sq = inUx * inUx + inUy * inUy;
-                            const u_sq_15 = 1.5 * u_sq;
+                            const u_sq_15 = 1.5 * (inUx * inUx + inUy * inUy);
 
-                            out0[i] = cx_w[0] * inRho * (1.0 - u_sq_15);
-                            let cu;
-                            cu = inUx; out1[i] = cx_w[1] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                            cu = inUy; out2[i] = cx_w[2] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                            cu = -inUx; out3[i] = cx_w[3] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                            cu = -inUy; out4[i] = cx_w[4] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                            cu = inUx + inUy; out5[i] = cx_w[5] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                            cu = -inUx + inUy; out6[i] = cx_w[6] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                            cu = -inUx - inUy; out7[i] = cx_w[7] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                            cu = inUx - inUy; out8[i] = cx_w[8] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                            for (let k = 0; k < 9; k++) {
+                                const cu = this.cx[k] * inUx + this.cy[k] * inUy;
+                                f_out[k][i] = cx_w[k] * inRho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
+                            }
                             continue;
                         }
 
-                        // Right Outflow (Simple Extrapolation)
                         if (config.isRightBoundary && x === nx - 2 && config.right === 'OUTFLOW') {
-                            out0[i] = out0[i - 1]; out1[i] = out1[i - 1]; out2[i] = out2[i - 1];
-                            out3[i] = out3[i - 1]; out4[i] = out4[i - 1]; out5[i] = out5[i - 1];
-                            out6[i] = out6[i - 1]; out7[i] = out7[i - 1]; out8[i] = out8[i - 1];
-                            ux_out[i] = ux_out[i - 1];
-                            uy_out[i] = uy_out[i - 1];
+                            const prev = i - 1;
+                            const uH = ux_out[prev];
+                            const vH = uy_out[prev];
+                            const u2 = 1.5 * (uH * uH + vH * vH);
+                            for (let k = 0; k < 9; k++) {
+                                const cu = this.cx[k] * uH + this.cy[k] * vH;
+                                f_out[k][i] = cx_w[k] * (1.0 + 3.0 * cu + 4.5 * cu * cu - u2);
+                            }
+                            ux_out[i] = uH;
+                            uy_out[i] = vH;
                             continue;
                         }
                     }
 
-                    // --- PULL STREAMING UNROLLED ---
-                    // pfX is the population arriving FROM direction X.
-                    let pf0 = f0_arr[i];
+                    const opp = [0, 3, 4, 1, 2, 7, 8, 5, 6];
+                    let pf0 = f_in[0][i];
                     let pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8;
 
-                    // Dir 1 (cx:1, cy:0) opposite is 3
-                    let ni1 = zOff + y * nx + (x - 1);
-                    pf1 = (obstacles[ni1] > 0) ? f3_arr[i] : f1_arr[ni1];
-                    // Dir 2 (cx:0, cy:1) opposite is 4
-                    let ni2 = zOff + (y - 1) * nx + x;
-                    pf2 = (obstacles[ni2] > 0) ? f4_arr[i] : f2_arr[ni2];
-                    // Dir 3 (cx:-1, cy:0) opposite is 1
-                    let ni3 = zOff + y * nx + (x + 1);
-                    pf3 = (obstacles[ni3] > 0) ? f1_arr[i] : f3_arr[ni3];
-                    // Dir 4 (cx:0, cy:-1) opposite is 2
-                    let ni4 = zOff + (y + 1) * nx + x;
-                    pf4 = (obstacles[ni4] > 0) ? f2_arr[i] : f4_arr[ni4];
+                    // Pull Streaming from neighbors with proper boundaries
+                    pf1 = (obstacles[i - 1] > 0.5) ? f_in[3][i] : f_in[1][i - 1];
+                    pf2 = (obstacles[i - nx] > 0.5) ? f_in[4][i] : f_in[2][i - nx];
+                    pf3 = (obstacles[i + 1] > 0.5) ? f_in[1][i] : f_in[3][i + 1];
+                    pf4 = (obstacles[i + nx] > 0.5) ? f_in[2][i] : f_in[4][i + nx];
+                    pf5 = (obstacles[i - nx - 1] > 0.5) ? f_in[7][i] : f_in[5][i - nx - 1];
+                    pf6 = (obstacles[i - nx + 1] > 0.5) ? f_in[8][i] : f_in[6][i - nx + 1];
+                    pf7 = (obstacles[i + nx + 1] > 0.5) ? f_in[5][i] : f_in[7][i + nx + 1];
+                    pf8 = (obstacles[i + nx - 1] > 0.5) ? f_in[6][i] : f_in[8][i + nx - 1];
 
-                    // Dir 5 (cx:1, cy:1) opp 7
-                    let ni5 = zOff + (y - 1) * nx + (x - 1);
-                    pf5 = (obstacles[ni5] > 0) ? f7_arr[i] : f5_arr[ni5];
-                    // Dir 6 (cx:-1, cy:1) opp 8
-                    let ni6 = zOff + (y - 1) * nx + (x + 1);
-                    pf6 = (obstacles[ni6] > 0) ? f8_arr[i] : f6_arr[ni6];
-                    // Dir 7 (cx:-1, cy:-1) opp 5
-                    let ni7 = zOff + (y + 1) * nx + (x + 1);
-                    pf7 = (obstacles[ni7] > 0) ? f5_arr[i] : f7_arr[ni7];
-                    // Dir 8 (cx:1, cy:-1) opp 6
-                    let ni8 = zOff + (y + 1) * nx + (x - 1);
-                    pf8 = (obstacles[ni8] > 0) ? f6_arr[i] : f8_arr[ni8];
-
-                    // MACROS CALCULATION
-                    const rho = pf0 + pf1 + pf2 + pf3 + pf4 + pf5 + pf6 + pf7 + pf8;
+                    let rho = pf0 + pf1 + pf2 + pf3 + pf4 + pf5 + pf6 + pf7 + pf8;
                     let ux = (pf1 + pf5 + pf8) - (pf3 + pf6 + pf7);
                     let uy = (pf2 + pf5 + pf6) - (pf4 + pf7 + pf8);
 
-                    if (rho > 0) { ux /= rho; uy /= rho; }
+                    ux /= rho; uy /= rho;
                     ux_out[i] = ux;
                     uy_out[i] = uy;
 
-                    const u_sq = ux * ux + uy * uy;
-                    const u_sq_15 = 1.5 * u_sq;
-                    const one_minus_omega = 1.0 - omega;
+                    const u_sq_15 = 1.5 * (ux * ux + uy * uy);
+                    const om_1 = 1.0 - omega;
 
-                    // EQUILIBRIUM & COLLISION
-                    let feq = cx_w[0] * rho * (1.0 - u_sq_15);
-                    out0[i] = pf0 * one_minus_omega + feq * omega;
-
-                    let cu = ux;
-                    feq = cx_w[1] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                    out1[i] = pf1 * one_minus_omega + feq * omega;
-
-                    cu = uy;
-                    feq = cx_w[2] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                    out2[i] = pf2 * one_minus_omega + feq * omega;
-
-                    cu = -ux;
-                    feq = cx_w[3] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                    out3[i] = pf3 * one_minus_omega + feq * omega;
-
-                    cu = -uy;
-                    feq = cx_w[4] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                    out4[i] = pf4 * one_minus_omega + feq * omega;
-
-                    cu = ux + uy;
-                    feq = cx_w[5] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                    out5[i] = pf5 * one_minus_omega + feq * omega;
-
-                    cu = -ux + uy;
-                    feq = cx_w[6] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                    out6[i] = pf6 * one_minus_omega + feq * omega;
-
-                    cu = -ux - uy;
-                    feq = cx_w[7] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                    out7[i] = pf7 * one_minus_omega + feq * omega;
-
-                    cu = ux - uy;
-                    feq = cx_w[8] * rho * (1.0 + 3.0 * cu + 4.5 * cu * cu - u_sq_15);
-                    out8[i] = pf8 * one_minus_omega + feq * omega;
+                    f_out[0][i] = pf0 * om_1 + (cx_w[0] * rho * (1.0 - u_sq_15)) * omega;
+                    f_out[1][i] = pf1 * om_1 + (cx_w[1] * rho * (1.0 + 3.0 * ux + 4.5 * ux * ux - u_sq_15)) * omega;
+                    f_out[2][i] = pf2 * om_1 + (cx_w[2] * rho * (1.0 + 3.0 * uy + 4.5 * uy * uy - u_sq_15)) * omega;
+                    f_out[3][i] = pf3 * om_1 + (cx_w[3] * rho * (1.0 - 3.0 * ux + 4.5 * ux * ux - u_sq_15)) * omega;
+                    f_out[4][i] = pf4 * om_1 + (cx_w[4] * rho * (1.0 - 3.0 * uy + 4.5 * uy * uy - u_sq_15)) * omega;
+                    f_out[5][i] = pf5 * om_1 + (cx_w[5] * rho * (1.0 + 3.0 * (ux + uy) + 4.5 * (ux + uy) * (ux + uy) - u_sq_15)) * omega;
+                    f_out[6][i] = pf6 * om_1 + (cx_w[6] * rho * (1.0 + 3.0 * (-ux + uy) + 4.5 * (-ux + uy) * (-ux + uy) - u_sq_15)) * omega;
+                    f_out[7][i] = pf7 * om_1 + (cx_w[7] * rho * (1.0 + 3.0 * (-ux - uy) + 4.5 * (-ux - uy) * (-ux - uy) - u_sq_15)) * omega;
+                    f_out[8][i] = pf8 * om_1 + (cx_w[8] * rho * (1.0 + 3.0 * (ux - uy) + 4.5 * (ux - uy) * (ux - uy) - u_sq_15)) * omega;
                 }
             }
 
-            // 2. SWAP par couche
-            for (let i = 0; i < 9; i++) {
-                const f_in = faces[i];
-                const f_out = faces[i + 9];
-                for (let y = 0; y < ny; y++) {
-                    for (let x = 0; x < nx; x++) {
-                        const idx = zOff + y * nx + x;
-                        f_in[idx] = f_out[idx];
-                    }
-                }
-            }
+            // No explicit swap needed due to ping-pong buffer strategy
 
+            // 3. VORTICITY
             // 3. VORTICITY
             for (let y = 1; y < ny - 1; y++) {
                 const yM = y - 1;
                 const yP = y + 1;
-
                 for (let x = 1; x < nx - 1; x++) {
-                    const xM = x > 1 ? x - 1 : 1;
-                    const xP = x < nx - 2 ? x + 1 : nx - 2;
-                    const dxDist = (x === 1 || x === nx - 2) ? 1.0 : 2.0;
+                    const xM = x - 1;
+                    const xP = x + 1;
 
-                    const loc_yM = y > 1 ? y - 1 : 1;
-                    const loc_yP = y < ny - 2 ? y + 1 : ny - 2;
-                    const loc_dyDist = (y === 1 || y === ny - 2) ? 1.0 : 2.0;
-
-                    const dUy_dx = (uy_out[zOff + y * nx + xP] - uy_out[zOff + y * nx + xM]) / dxDist;
-                    const dUx_dy = (ux_out[zOff + loc_yP * nx + x] - ux_out[zOff + loc_yM * nx + x]) / loc_dyDist;
+                    // Central Difference across 2 units
+                    const dUy_dx = (uy_out[zOff + y * nx + xP] - uy_out[zOff + y * nx + xM]) / 2.0;
+                    const dUx_dy = (ux_out[zOff + yP * nx + x] - ux_out[zOff + yM * nx + x]) / 2.0;
                     curl_out[zOff + y * nx + x] = dUy_dx - dUx_dy;
                 }
             }
 
             // 4. TRACER ADVECTION (Smoke)
+            // Smoke uses a dedicated parity too for perfect smoothness across chunks
+            const smoke_in = faces[22 + parity];
+            const smoke_out = faces[22 + nextParity];
+
             for (let y = 1; y < ny - 1; y++) {
                 for (let x = 1; x < nx - 1; x++) {
                     const idx = zOff + y * nx + x;
                     if (obstacles[idx] > 0) {
-                        smoke[idx] = 0;
+                        smoke_out[idx] = 0;
                         continue;
                     }
                     const vx = ux_out[idx];
@@ -360,19 +331,32 @@ export class AerodynamicsEngine implements IHypercubeEngine {
                     const sx = x - vx;
                     const sy = y - vy;
 
-                    const ix = Math.floor(sx), iy = Math.floor(sy);
-                    if (ix >= 1 && ix < nx - 1 && iy >= 1 && iy < ny - 1) {
-                        smoke[idx] = smoke[iy * nx + ix] * 0.995;
+                    // BILINEAR INTERPOLATION for "SMOKE" look
+                    // Instead of Math.floor, we blend 4 neighbor pixels
+                    const x0 = Math.floor(sx), y0 = Math.floor(sy);
+                    const x1 = x0 + 1, y1 = y0 + 1;
+                    const fx = sx - x0, fy = sy - y0;
+
+                    if (x0 >= 0 && x1 < nx && y0 >= 0 && y1 < ny) {
+                        const val00 = smoke_in[y0 * nx + x0];
+                        const val10 = smoke_in[y0 * nx + x1];
+                        const val01 = smoke_in[y1 * nx + x0];
+                        const val11 = smoke_in[y1 * nx + x1];
+                        const raw = (val00 * (1 - fx) + val10 * fx) * (1 - fy) + (val01 * (1 - fx) + val11 * fx) * fy;
+
+                        const neighborAvg = (smoke_in[idx - 1] + smoke_in[idx + 1] + smoke_in[idx - nx] + smoke_in[idx + nx]) * 0.25;
+                        smoke_out[idx] = (raw * 0.995 + neighborAvg * 0.005) * 0.9999;
                     }
 
-                    if (x === 1 && y > ny / 4 && y < 3 * ny / 4) {
-                        smoke[idx] = 1.0;
+                    if (this.boundaryConfig?.isLeftBoundary && x === 1) {
+                        const pitch = Math.floor(ny / 20);
+                        if ((y + 2) % pitch <= 2) {
+                            smoke_out[idx] = 1.0;
+                        }
                     }
                 }
             }
         }
-
-        this.dragScore = this.dragScore * 0.95 + (frameDrag * 100 / nz) * 0.05;
     }
 
     public get wgslSource(): string {

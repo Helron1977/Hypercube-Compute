@@ -74,14 +74,24 @@ export class HypercubeChunk {
         this.gpuResource = new HypercubeGpuResource(totalSize, `Chunk ${this.x},${this.y}`);
         this.gpuResource.init();
 
-        const device = HypercubeGPUContext.device;
-        // Upload initial
-        device.queue.writeBuffer(this.gpuReadBuffer!, 0, this.masterBuffer.buffer, this.offset, totalSize);
-        device.queue.writeBuffer(this.gpuWriteBuffer!, 0, this.masterBuffer.buffer, this.offset, totalSize);
+        this.pushToGPU();
 
+        const device = HypercubeGPUContext.device;
         if (this.engine.initGPU) {
             this.engine.initGPU(device, this.gpuReadBuffer!, this.gpuWriteBuffer!, this.stride, this.nx, this.ny, this.nz);
         }
+    }
+
+    /**
+     * Uploads the current CPU faces (from masterBuffer) to the GPU buffers.
+     * Useful for manual initialization of obstacles/states on CPU before starting GPU compute.
+     */
+    public pushToGPU() {
+        if (!this.gpuResource || !this.gpuReadBuffer || !this.gpuWriteBuffer) return;
+        const device = HypercubeGPUContext.device;
+        const totalSize = this.faces.length * this.stride;
+        device.queue.writeBuffer(this.gpuReadBuffer, 0, this.masterBuffer.buffer, this.offset, totalSize);
+        device.queue.writeBuffer(this.gpuWriteBuffer, 0, this.masterBuffer.buffer, this.offset, totalSize);
     }
 
     swapGPUBuffers() {

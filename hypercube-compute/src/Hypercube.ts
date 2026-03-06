@@ -6,6 +6,7 @@ import { WebGpuRenderer } from './io/WebGpuRenderer';
 import { HypercubeIsoRenderer } from './utils/HypercubeIsoRenderer';
 import { HypercubeGPUContext } from './core/gpu/HypercubeGPUContext';
 import { HypercubeChunk } from './core/HypercubeChunk';
+import { HypercubeGpuVolumeRenderer } from './io/HypercubeGpuVolumeRenderer';
 import type { IHypercubeEngine } from './engines/IHypercubeEngine';
 
 export interface HypercubeConfig {
@@ -113,54 +114,70 @@ export class Hypercube {
      * Automatically chooses the best renderer (2D or Iso) for the given grid.
      */
     public static autoRender(grid: HypercubeCpuGrid, canvas: HTMLCanvasElement, options: any = {}) {
-        const engineName = (grid as any)._engineName;
-        const tags = EngineRegistry.getTags(engineName);
+        const firstChunk = grid.cubes[0][0];
+        const engine = firstChunk?.engine;
+        const tags = (engine as any)?.getTags ? (engine as any).getTags() : [];
+        const currentParity = (engine as any)?.parity ?? 0;
+        const smokeFace = 22 + currentParity;
+        const isIso = tags.includes('iso') || tags.includes('2.5d') || options.mode === 'isometric';
 
-        if (tags.includes('iso') || tags.includes('2.5d')) {
+        if (isIso && grid.mode === 'cpu') {
             // Iso Render
-            if (!(grid as any)._renderer) {
+            if (!(grid as any)._renderer || !((grid as any)._renderer instanceof HypercubeIsoRenderer)) {
                 (grid as any)._renderer = new HypercubeIsoRenderer(canvas, undefined, options.scale || 4.0);
             }
             const renderer = (grid as any)._renderer as HypercubeIsoRenderer;
-            renderer.clearAndSetup(options.r ?? 10, options.g ?? 20, options.b ?? 30);
+            renderer.clearAndSetup(options.r ?? 10, options.g ?? 20, options.b ?? 35);
             renderer.renderMultiChunkVolume(
                 grid.cubes.map(r => r.map(c => c!.faces)),
                 grid.nx, grid.ny, grid.cols, grid.rows,
                 {
-                    densityFaceIndex: options.faceIndex ?? 22,
+                    densityFaceIndex: options.faceIndex ?? smokeFace,
                     obstacleFaceIndex: options.obstaclesFace ?? 18
                 }
             );
-        } else if ((grid as any).mode === 'gpu') {
-            // Native GPU Direct Render
-            if (!(grid as any)._renderer) {
-                (grid as any)._renderer = new WebGpuRenderer(canvas);
+        } else if (grid.mode === 'gpu') {
+            // Native GPU Direct Render (V6.0 - Zero-Copy)
+            if (!(grid as any)._gpuRenderer) {
+                (grid as any)._gpuRenderer = new HypercubeGpuVolumeRenderer(canvas);
             }
-            const renderer = (grid as any)._renderer as WebGpuRenderer;
+            const firstChunk = grid.cubes[0][0];
+            const engine = firstChunk?.engine;
+            const tags = (engine as any)?.getTags ? (engine as any).getTags() : [];
+            const isIso = tags.includes('iso') || tags.includes('2.5d') || (options as any).mode === 'isometric';
+
+            let defaultColormap: any = 'heatmap';
+            if (tags.includes('arctic')) defaultColormap = 'arctic';
+            if (tags.includes('ocean')) defaultColormap = 'ocean';
+
+            const renderer = (grid as any)._gpuRenderer as HypercubeGpuVolumeRenderer;
             renderer.render(grid, {
-                faceIndex: options.faceIndex ?? 0,
-                colormap: options.colormap || 'heatmap',
+                faceIndex: options.faceIndex ?? (tags.includes('arctic') ? smokeFace : 0),
+                obstacleFaceIndex: options.obstaclesFace ?? (tags.includes('lbm') ? 18 : undefined),
+                vorticityFace: options.vorticityFace ?? (tags.includes('arctic') ? 21 : undefined),
+                colormap: options.colormap || defaultColormap,
                 minVal: options.minVal ?? 0,
-                maxVal: options.maxVal ?? 1,
-                sliceZ: options.sliceZ ?? Math.floor(grid.nz / 2),
-                obstaclesFace: options.obstaclesFace
+                maxVal: options.maxVal ?? (tags.includes('ocean') ? 1.5 : 1.0),
+                mode: isIso ? 'isometric' : 'topdown'
             });
         } else {
             // CPU Canvas Adapter (2D or 3D slice)
             if (!(grid as any)._renderer) {
                 (grid as any)._renderer = new CanvasAdapter(canvas);
             }
-            const renderer = (grid as any)._renderer as CanvasAdapter;
-            renderer.renderFromFaces(
+            const adapter = (grid as any)._renderer as CanvasAdapter;
+
+            adapter.renderFromFaces(
                 grid.cubes.map(r => r.map(c => c!.faces)),
                 grid.nx, grid.ny, grid.cols, grid.rows,
                 {
-                    faceIndex: options.faceIndex ?? 0,
-                    colormap: options.colormap || 'heatmap',
+                    faceIndex: options.faceIndex ?? (tags.includes('arctic') ? smokeFace : 0),
+                    obstaclesFace: options.obstaclesFace ?? (tags.includes('lbm') ? 18 : undefined),
+                    vorticityFace: options.vorticityFace ?? (tags.includes('arctic') ? 21 : undefined),
+                    colormap: options.colormap ?? (tags.includes('arctic') ? 'arctic' : (tags.includes('ocean') ? 'ocean' : 'heatmap')),
                     minVal: options.minVal ?? 0,
                     maxVal: options.maxVal ?? 1,
-                    sliceZ: options.sliceZ ?? Math.floor(grid.nz / 2),
-                    obstaclesFace: options.obstaclesFace
+                    sliceZ: options.sliceZ ?? 0
                 }
             );
         }

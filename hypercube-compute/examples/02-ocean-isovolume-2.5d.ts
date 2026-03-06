@@ -1,3 +1,4 @@
+import { Hypercube } from '../src/Hypercube';
 import { HypercubeCpuGrid } from '../src/core/HypercubeCpuGrid';
 import { HypercubeMasterBuffer } from '../src/core/HypercubeMasterBuffer';
 import { OceanEngine } from '../src/engines/OceanEngine';
@@ -82,7 +83,10 @@ async function bootstrap() {
     canvas.style.left = '0';
     document.body.appendChild(canvas);
 
-    const isoRenderer = new HypercubeIsoRenderer(canvas, undefined, 4.0);
+    let isoRenderer: any = null;
+    if (mode === 'cpu') {
+        isoRenderer = new HypercubeIsoRenderer(canvas, undefined, 4.0);
+    }
     const hud = new BenchmarkHUD('OceanEngine 2.5D IsoVolume', `${RESOLUTION * COLS} x ${RESOLUTION * ROWS}`);
 
     // Add mouse interaction
@@ -103,23 +107,25 @@ async function bootstrap() {
         const start = performance.now();
         await grid.compute();
 
-        // GPU Visualization Sync (Every 2 frames, non-blocking)
-        if (mode === 'gpu' && frameCount % 2 === 0) {
-            const flatCubes = grid.cubes.flat().filter(c => c !== null);
-            // Synchronize the density face (22) for the renderer
-            Promise.all(flatCubes.map(c => c!.syncToHost([22], false)));
+        if (mode === 'gpu') {
+            // NATIVE GPU RENDERING (Zero-Copy)
+            Hypercube.autoRender(grid, canvas, {
+                faceIndex: 22,
+                obstaclesFace: 18,
+                scale: 4.0
+            });
+        } else {
+            // LEGACY CPU RENDERING
+            isoRenderer.clearAndSetup(5, 15, 45); // Deep sea dark blue
+            isoRenderer.renderMultiChunkVolume(
+                grid.cubes.map(r => r.map(c => c!.faces)),
+                grid.nx, grid.ny, COLS, ROWS,
+                {
+                    densityFaceIndex: 22, // rho
+                    obstacleFaceIndex: 18 // obst
+                }
+            );
         }
-        frameCount++;
-
-        isoRenderer.clearAndSetup(5, 15, 45); // Deep sea dark blue
-        isoRenderer.renderMultiChunkVolume(
-            grid.cubes.map(r => r.map(c => c!.faces)),
-            grid.nx, grid.ny, COLS, ROWS,
-            {
-                densityFaceIndex: 22, // rho
-                obstacleFaceIndex: 18 // obst
-            }
-        );
 
         const ms = performance.now() - start;
         hud.updateCompute(ms);

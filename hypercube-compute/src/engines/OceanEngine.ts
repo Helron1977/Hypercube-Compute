@@ -15,6 +15,7 @@ export interface OceanEngineParams {
  */
 export class OceanEngine implements IHypercubeEngine {
     public get name(): string { return "OceanEngine 2.5D"; }
+    public getTags(): string[] { return ['ocean', '2.5d', 'isometric', 'waves']; }
 
     public getRequiredFaces(): number { return 25; }
 

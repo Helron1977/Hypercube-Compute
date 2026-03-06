@@ -5,6 +5,7 @@ import { BoundaryType } from '../src/core/cpu/BoundaryConditions';
 import { HypercubeMath } from '../src/math/HypercubeMath';
 import { Hypercube } from '../src/Hypercube';
 import { BenchmarkHUD } from './shared/BenchmarkHUD';
+import { HypercubeGPUContext } from '../src/core/gpu/HypercubeGPUContext';
 
 const RESOLUTION = 256;
 const ROWS = 2;
@@ -12,7 +13,7 @@ const COLS = 2;
 
 async function bootstrap() {
     const urlParams = new URLSearchParams(window.location.search);
-    const mode = urlParams.get('mode') === 'gpu' ? 'gpu' : 'cpu';
+    const mode = urlParams.get('mode') === 'cpu' ? 'cpu' : 'gpu';
 
     // Add description overlay
     const desc = document.createElement('div');
@@ -35,6 +36,14 @@ async function bootstrap() {
     const engineTemp = new AerodynamicsEngine();
     const numFaces = engineTemp.getRequiredFaces();
 
+    if (mode === 'gpu') {
+        const ok = await HypercubeGPUContext.init();
+        if (!ok) {
+            alert("WebGPU not supported or initialization failed.");
+            return;
+        }
+    }
+
     const masterBuffer = new HypercubeMasterBuffer(totalCells * numFaces * 4 * ROWS * COLS + 1024);
 
     const grid = await HypercubeCpuGrid.create(
@@ -55,36 +64,68 @@ async function bootstrap() {
         right: BoundaryType.OUTFLOW,
         top: BoundaryType.WALL,
         bottom: BoundaryType.WALL,
-        inflowUx: 0.12,
+        inflowUx: 0.15,
         inflowUy: 0.0,
         inflowDensity: 1.0
     };
 
-    // Draw obstacle in the center of the global grid
-    // In a 2x2 grid, the center (512 total) is the boundary.
-    // Let's place it at (RESOLUTION, RESOLUTION/2) global -> chunk(1, 0) side?
-    // Let's just put it in chunk (0,0) near the right edge to be safe
-    const cx = Math.floor(RESOLUTION * 0.7);
-    const cy = Math.floor(RESOLUTION / 2);
+    // 1. Initialize with smooth flow
+    const u0 = 0.15;
+    const engineTemp2 = new AerodynamicsEngine();
+    const eq = engineTemp2.getEquilibrium(1.0, u0, 0.0);
+    for (let gy = 0; gy < ROWS; gy++) {
+        for (let gx = 0; gx < COLS; gx++) {
+            const chunk = grid.cubes[gy][gx]!;
+            // Fill ONLY the population faces (0-17) with equilibrium
+            for (let k = 0; k < 18; k++) chunk.faces[k].fill(eq[k % 9]);
+            // Clear other faces (obstacles, ux, uy, curl, smoke)
+            for (let k = 18; k < 24; k++) chunk.faces[k].fill(0);
+        }
+    }
 
-    for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-            const faces = grid.cubes[y][x]!.faces;
-            // Obstacle logic
-            if (x === 0 && y === 0) {
-                for (let ly = 0; ly < RESOLUTION; ly++) {
-                    for (let lx = 0; lx < RESOLUTION; lx++) {
-                        const dist = Math.sqrt((lx - cx) ** 2 + (ly - cy) ** 2);
-                        if (dist < 32) {
-                            faces[18][ly * RESOLUTION + lx] = 1.0;
+    // 2. Draw Biplane Wing Profiles (Obstacles)
+    const wingLength = 80.0;
+    const thickness = 0.16;
+    const angle = 12 * Math.PI / 180; // Positive angle of attack for NACA profiles
+
+    for (let gy = 0; gy < ROWS; gy++) {
+        for (let gx = 0; gx < COLS; gx++) {
+            const chunk = grid.cubes[gy][gx]!;
+            const globalOffX = gx * (RESOLUTION - 2);
+            const globalOffY = gy * (RESOLUTION - 2);
+
+            for (let ly = 1; ly < RESOLUTION - 1; ly++) {
+                const py = globalOffY + (ly - 1);
+                for (let lx = 1; lx < RESOLUTION - 1; lx++) {
+                    const px = globalOffX + (lx - 1);
+                    const idx = ly * RESOLUTION + lx;
+
+                    // Combined Wing Centers for biplane effect
+                    const paintWing = (cx: number, cy: number) => {
+                        const dx = px - cx;
+                        const dy = py - cy;
+                        const rx = (dx * Math.cos(angle) + dy * Math.sin(angle)) / wingLength;
+                        const ry = (-dx * Math.sin(angle) + dy * Math.cos(angle)) / wingLength;
+                        if (rx > 0 && rx < 1.0) {
+                            const y_t = 5.0 * thickness * (0.2969 * Math.sqrt(rx) - 0.1260 * rx - 0.3516 * rx * rx + 0.2843 * rx * rx * rx - 0.1015 * rx * rx * rx * rx);
+                            return Math.abs(ry) < y_t;
                         }
+                        return false;
+                    };
+
+                    // Wing 1 (Top) and Wing 2 (Bottom)
+                    if (paintWing(RESOLUTION * 0.7, RESOLUTION * 0.7) ||
+                        paintWing(RESOLUTION * 0.75, RESOLUTION * 1.3)) {
+                        chunk.faces[18][idx] = 1.0;
                     }
                 }
             }
         }
     }
 
-    // Prepare Rendereur sur la grille UTILE (sans ghost cells)
+    grid.pushToGPU();
+
+    // Prepare Rendereur
     const canvas = document.createElement('canvas');
     canvas.width = (RESOLUTION - 2) * COLS;
     canvas.height = (RESOLUTION - 2) * ROWS;
@@ -92,30 +133,32 @@ async function bootstrap() {
     canvas.style.width = '100vw';
     canvas.style.height = '100vh';
     canvas.style.objectFit = 'contain';
+    canvas.style.background = '#020408'; // Deep Arctic background
     document.body.appendChild(canvas);
 
-    const hud = new BenchmarkHUD('Aerodynamics D2Q9 (O(1) Unrolled)', `${RESOLUTION * COLS} x ${RESOLUTION * ROWS}`);
+    const hud = new BenchmarkHUD('Aerodynamics D2Q9 [Shiny Arctic]', `${RESOLUTION * COLS} x ${RESOLUTION * ROWS}`);
 
     // Main Compute Loop
     async function tick() {
         const start = performance.now();
-
-        // 1. Math Step (O(1) LBM Multithreaded)
         await grid.compute();
 
-        // 2. Render Vorticité (Face 21) safely via autoRender
+        const currentParity = (grid.cubes[0][0]!.engine as any).parity ?? 0;
+        const smokeFace = 22 + currentParity; // Use current parity for rendering
+
+        // Render Visual Composite (Face 22/23: Smoke + Face 21: Vorticity)
         Hypercube.autoRender(grid, canvas, {
-            faceIndex: 21,
-            colormap: 'vorticity',
-            minVal: -0.05,
-            maxVal: 0.05,
-            obstaclesFace: 18
+            faceIndex: smokeFace,
+            colormap: 'arctic',
+            minVal: 0.0,
+            maxVal: 1.0,
+            obstaclesFace: 18,
+            vorticityFace: 21 // Inject vorticity for crisp convolutions
         });
 
         const ms = performance.now() - start;
         hud.updateCompute(ms);
         hud.tickFrame();
-
         requestAnimationFrame(tick);
     }
 
