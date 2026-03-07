@@ -60,6 +60,14 @@ export class HypercubeFactory {
             console.warn(`[HypercubeFactory] Allocation massive détectée (${(totalSize / (1024 * 1024)).toFixed(2)} MB). Vérifiez vos dimensions.`);
         }
 
+        // 4. Verification de la capacité GPU
+        if (config.mode === 'gpu' && !gpuEngineClass) {
+            const msg = `[HypercubeFactory] ERREUR : Le mode 'gpu' est demandé pour '${descriptor.name}', mais aucune classe de moteur GPU (gpuEngineClass) n'a été fournie. La V8 ne peut pas deviner le shader WGSL à partir du manifeste seul.`;
+            console.error(msg);
+            alert(msg);
+            throw new Error(msg);
+        }
+
         // 4. Allocation du MasterBuffer (Automatique)
         const masterBuffer = new HypercubeMasterBuffer(totalSize + 2048); // + Small Header Margin
 
@@ -79,9 +87,12 @@ export class HypercubeFactory {
                 if (gpuEngineClass) {
                     const gpuInst = new gpuEngineClass();
                     (shim as any).initGPU = gpuInst.initGPU.bind(gpuInst);
-                    (shim as any).computeGPU = gpuInst.computeGPU.bind(gpuInst);
+                    (shim as any).swap = gpuInst.swap.bind(gpuInst);
+                    (shim as any).computeGPU = (device: GPUDevice, commandEncoder: GPUCommandEncoder, nx: number, ny: number, nz: number, rb: GPUBuffer, wb: GPUBuffer) => {
+                        gpuInst.computeGPU(device, commandEncoder, nx, ny, nz, rb, wb);
+                        shim.parity = (gpuInst as any).parity;
+                    };
                     (shim as any).wgslSource = gpuInst.wgslSource;
-                    (shim as any).parity = (gpuInst as any).parity;
                 }
                 return shim;
             },

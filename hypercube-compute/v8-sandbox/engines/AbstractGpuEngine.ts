@@ -10,8 +10,21 @@ export abstract class AbstractGpuEngine {
     protected initialWriteBuffer: GPUBuffer | null = null;
     protected pipeline: GPUComputePipeline | null = null;
     protected bindGroups: GPUBindGroup[] = []; // [Parity 0, Parity 1]
+    public parity: number = 0;
 
     constructor(protected descriptor: EngineDescriptor) { }
+
+    public swap() {
+        this.parity = (this.parity + 1) % 2;
+    }
+
+    public get readBuffer(): GPUBuffer | null {
+        return this.parity === 0 ? this.initialReadBuffer : this.initialWriteBuffer;
+    }
+
+    public get writeBuffer(): GPUBuffer | null {
+        return this.parity === 0 ? this.initialWriteBuffer : this.initialReadBuffer;
+    }
 
     protected getFaceIndex(name: string): number {
         const idx = this.descriptor.faces.findIndex(f => f.name === name);

@@ -77,6 +77,19 @@ export class HypercubeChunk {
 
         this.pushToGPU();
 
+        const device = HypercubeGPUContext.device;
+        if (this.engine?.initGPU) {
+            this.engine.initGPU(
+                device,
+                this.gpuReadBuffer!,
+                this.gpuWriteBuffer!,
+                uniformBuffer!,
+                this.stride,
+                this.nx,
+                this.ny,
+                this.nz
+            );
+        }
     }
 
     /**

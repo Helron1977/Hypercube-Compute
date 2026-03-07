@@ -1,7 +1,7 @@
 import { HypercubeMasterBuffer } from '../v8-sandbox/core/HypercubeMasterBuffer';
 import { HypercubeCpuGrid } from '../v8-sandbox/core/HypercubeCpuGrid';
 import { OceanEngine } from '../src/engines/OceanEngine';
-import { OceanV8 } from '../v8-sandbox/engines/OceanV8';
+import { OceanV8Cpu } from '../v8-sandbox/engines/OceanV8Cpu';
 import { V8EngineProxy } from '../v8-sandbox/core/V8EngineProxy';
 import { Circle } from '../v8-sandbox/core/Shapes';
 import { HypercubeIsoRenderer } from '../src/utils/HypercubeIsoRenderer';
@@ -53,7 +53,7 @@ async function main() {
 
     // 4. Proxy Wrapping for Semantic Controls
     const engine = grid.cubes[0][0]?.engine as unknown as OceanEngine;
-    const proxy = new V8EngineProxy(grid, OceanV8, engine as any);
+    const proxy = new V8EngineProxy(grid, OceanV8Cpu, engine as any);
 
     // 5. Setup Fullscreen Canvas for ISO view
     const canvas = document.createElement('canvas');
@@ -62,7 +62,7 @@ async function main() {
     canvas.style.position = 'fixed';
     canvas.style.top = '0';
     canvas.style.left = '0';
-    canvas.style.zIndex = '-1';
+    canvas.style.zIndex = '1';
     document.body.appendChild(canvas);
 
     const isoRenderer = new HypercubeIsoRenderer(canvas, undefined, 4.0);
