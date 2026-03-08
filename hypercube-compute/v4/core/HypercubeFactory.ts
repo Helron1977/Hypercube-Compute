@@ -45,9 +45,14 @@ export class HypercubeFactory {
         }
 
         // 2. Calcul des ressources nécessaires (Basé sur le Manifest et l'alignement WebGPU)
+        const padding = this.detectRequiredPadding(descriptor);
+        const physicalNx = nx + padding * 2;
+        const physicalNy = ny + padding * 2;
+        const physicalNz = nz > 1 ? nz + padding * 2 : 1;
+
         const numFaces = descriptor.faces.length;
         const ALIGNMENT = 256;
-        const stridePerFace = Math.ceil((nx * ny * nz * 4) / ALIGNMENT) * ALIGNMENT;
+        const stridePerFace = Math.ceil((physicalNx * physicalNy * physicalNz * 4) / ALIGNMENT) * ALIGNMENT;
         const bytesPerChunk = stridePerFace * numFaces;
         const totalChunks = chunks[0] * chunks[1];
 
@@ -64,7 +69,7 @@ export class HypercubeFactory {
         if (config.mode === 'gpu' && !gpuEngineClass) {
             const msg = `[HypercubeFactory] ERREUR : Le mode 'gpu' est demandé pour '${descriptor.name}', mais aucune classe de moteur GPU (gpuEngineClass) n'a été fournie. La V8 ne peut pas deviner le shader WGSL à partir du manifeste seul.`;
             console.error(msg);
-            // alert(msg); // Removed to avoid ReferenceError in Node/Vitest
+            alert(msg);
             throw new Error(msg);
         }
 
@@ -99,7 +104,7 @@ export class HypercubeFactory {
             numFaces,
             isPeriodic,
             config.useWorkers ?? true,
-            undefined,
+            padding,
             config.mode ?? 'gpu'
         );
 

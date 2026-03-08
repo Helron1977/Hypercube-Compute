@@ -83,25 +83,23 @@ export class CanvasAdapter {
                             // SCIENTIFIC COMPOSITE: Background(Light Blue) -> Smoke(Navy) -> Vorticity(Red)
                             const s = Math.max(0, Math.min(1.0, (data[srcIdx] - minV) / range));
 
-                            // 1. BASE: Light Blue
-                            let r = 160, g = 200, b = 255;
+                            // 1. BASE: Crisp Light Cyan/Blue
+                            let r = 180, g = 220, b = 255;
 
-                            // 2. SMOKE: Blend to Navy Blue (10, 20, 60)
-                            const rN = 10, gN = 25, bN = 70;
-                            const tS = Math.pow(s, 0.6); // Slightly bias towards visibility
+                            // 2. SMOKE: Blend to Navy/Slate Blue (15, 30, 80)
+                            const rN = 15, gN = 30, bN = 80;
+                            const tS = Math.pow(s, 0.35); // Sharp transition
                             r = r * (1 - tS) + rN * tS;
                             g = g * (1 - tS) + gN * tS;
                             b = b * (1 - tS) + bN * tS;
 
-                            // 3. CONVOLUTIONS: Pure Red Highlights (Chirurgical Detail)
-                            // Multiplier is now sane (30x) and linear
+                            // 3. VORTICITY: Pure Red details
                             if (options.vorticityFace !== undefined) {
                                 const vData = faces[options.vorticityFace];
-                                const vMag = Math.min(1.0, Math.abs(vData[srcIdx]) * 30.0);
+                                const vMag = Math.min(1.0, Math.abs(vData[srcIdx]) * 120.0); // High sensitivity
 
-                                if (vMag > 0.15) { // Only the eye of the hurricane
-                                    const t = (vMag - 0.15) * 1.2;
-                                    const tC = Math.min(1.0, t);
+                                if (vMag > 0.05) {
+                                    const tC = Math.min(1.0, (vMag - 0.05) * 1.5);
                                     r = r * (1 - tC) + 255 * tC;
                                     g = g * (1 - tC);
                                     b = b * (1 - tC);
