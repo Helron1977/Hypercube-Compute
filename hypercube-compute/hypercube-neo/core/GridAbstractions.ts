@@ -61,12 +61,25 @@ export interface IPhysicalChunk {
  */
 export interface IMasterBuffer {
     readonly byteLength: number;
+    readonly totalSlotsPerChunk: number;
+    readonly strideFace: number;
     readonly rawBuffer: SharedArrayBuffer | ArrayBuffer;
+    readonly gpuBuffer?: any; // GPUBuffer if mode is 'gpu'
 
     /**
      * Get the set of memory views for a specific chunk.
      */
     getChunkViews(chunkId: string): IPhysicalChunk;
+
+    /**
+     * Copy data from CPU to GPU.
+     */
+    syncToDevice(): void;
+
+    /**
+     * Copy data from GPU back to the CPU ArrayBuffer.
+     */
+    syncToHost(): Promise<void>;
 }
 
 /**
@@ -92,6 +105,7 @@ export interface IRasterizer {
         vChunk: VirtualChunk,
         vGrid: IVirtualGrid,
         mBuffer: IMasterBuffer,
-        t: number
+        t: number,
+        parityTarget?: 'read' | 'write'
     ): void;
 }

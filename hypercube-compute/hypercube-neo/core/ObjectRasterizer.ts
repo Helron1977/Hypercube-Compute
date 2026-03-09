@@ -53,7 +53,9 @@ export class ObjectRasterizer implements IRasterizer {
                 // injected into the newly evolved state of the current step.
                 let bufferIdx: number;
                 if (this.parityManager) {
-                    bufferIdx = this.parityManager.getFaceIndices(propName).write;
+                    const target = (arguments[4] as any) || 'write';
+                    const indices = this.parityManager.getFaceIndices(propName);
+                    bufferIdx = target === 'read' ? indices.read : indices.write;
                 } else {
                     bufferIdx = this.getBufferIndex(faceMappings, faceIdx);
                 }

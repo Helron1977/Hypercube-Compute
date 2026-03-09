@@ -1,16 +1,23 @@
 import { IFactory } from './IFactory';
+import { IBoundarySynchronizer } from './GridAbstractions';
 import { HypercubeConfig, EngineDescriptor, HypercubeManifest } from './types';
 import { VirtualGrid } from './VirtualGrid';
 import { MasterBuffer } from './MasterBuffer';
 import { NeoEngineProxy } from './NeoEngineProxy';
+import { IDispatcher } from './IDispatcher';
+import { HypercubeGPUContext } from '../../src/core/gpu/HypercubeGPUContext';
 import { ObjectRasterizer } from './ObjectRasterizer';
 import { BoundarySynchronizer } from './BoundarySynchronizer';
 import { ParityManager } from './ParityManager';
 import { KernelRegistry } from './kernels/KernelRegistry';
 import { initializeKernels } from './kernels/KernelInitializer';
+import { initializeGpuKernels } from './kernels/GpuKernelInitializer';
+import { GpuDispatcher } from './GpuDispatcher';
+import { GpuBoundarySynchronizer } from './GpuBoundarySynchronizer';
 
 // Auto-register default kernels
 initializeKernels();
+initializeGpuKernels();
 
 /**
  * High-level factory for Hypercube Neo.
@@ -46,31 +53,45 @@ export class HypercubeNeoFactory implements IFactory {
     public async build(config: HypercubeConfig, descriptor: EngineDescriptor): Promise<NeoEngineProxy> {
         console.log(`Factory: Building engine in ${config.mode.toUpperCase()} mode...`);
 
-        if (config.mode === 'gpu') {
-            console.warn("Factory: GPU mode requested but not yet fully implemented. Falling back to CPU.");
-            // config.mode = 'cpu'; // Temporary fallback for stability
-        }
-
         // 1. Domain Decomposition (Virtual Layout)
         const vGrid = this.createVirtualGrid(config, descriptor);
 
-        // 2. Memory Allocation (Physical Layout)
-        // Note: In the future, MasterBuffer will handle GPU buffer allocation if mode === 'gpu'
+        // 2. GPU Initialization (if needed)
+        if (config.mode === 'gpu') {
+            await HypercubeGPUContext.init();
+        }
+
+        // 3. Memory Allocation (Physical Layout)
         const mBuffer = new MasterBuffer(vGrid);
 
-        // 3. Parity Management
+        // 4. Parity Management
         const parityManager = new ParityManager(vGrid.dataContract);
 
-        // 4. Orchestration Layer
+        // 5. Orchestration Layer
         const rasterizer = new ObjectRasterizer(parityManager);
-        const synchronizer = new BoundarySynchronizer();
+        let synchronizer: IBoundarySynchronizer;
+        let dispatcher: IDispatcher;
 
-        return new NeoEngineProxy(
+        if (config.mode === 'gpu') {
+            synchronizer = new GpuBoundarySynchronizer();
+            dispatcher = new GpuDispatcher(vGrid, mBuffer, parityManager);
+        } else {
+            synchronizer = new BoundarySynchronizer();
+            dispatcher = config.executionMode === 'parallel'
+                ? new (await import('./ParallelDispatcher')).ParallelDispatcher(vGrid, mBuffer, parityManager)
+                : new (await import('./NumericalDispatcher')).NumericalDispatcher(vGrid, mBuffer, parityManager);
+        }
+
+        const engine = new NeoEngineProxy(
             vGrid,
             mBuffer,
             parityManager,
             rasterizer,
-            synchronizer
+            synchronizer,
+            dispatcher
         );
+
+        await engine.init();
+        return engine;
     }
 }

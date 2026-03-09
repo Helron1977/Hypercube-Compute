@@ -18,13 +18,22 @@ export class DataContract {
      * Generate the mapping for all faces based on the descriptor.
      */
     getFaceMappings(): FaceMapping[] {
-        return this.descriptor.faces.map((face, index) => ({
-            faceIndex: index,
-            name: face.name,
-            type: face.type,
-            requiresSync: face.isSynchronized,
-            isPingPong: face.isSynchronized && this.descriptor.requirements.pingPong && !face.isReadOnly
-        }));
+        return this.descriptor.faces.map((face, index) => {
+            // Priority:
+            // 1. Explicit face.isPingPong (if defined)
+            // 2. Default logic (synchronized && enabled && !readOnly)
+            const isPingPong = face.hasOwnProperty('isPingPong')
+                ? (face as any).isPingPong
+                : (face.isSynchronized && this.descriptor.requirements.pingPong && !face.isReadOnly);
+
+            return {
+                faceIndex: index,
+                name: face.name,
+                type: face.type,
+                requiresSync: face.isSynchronized,
+                isPingPong: !!isPingPong
+            };
+        });
     }
 
     /**
