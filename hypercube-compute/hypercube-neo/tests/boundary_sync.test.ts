@@ -67,6 +67,68 @@ describe('Hypercube Neo: Boundary Synchronization', () => {
 
         // c1_1's Top-Left Ghost cell is at (0, 0)
         // It should have received 99 from c0_0
-        expect(fi_1_1[0 * pNx + 0]).toBe(99);
+    });
+});
+
+describe('Hypercube Neo: Periodic Boundaries', () => {
+    const lbmDescriptor: EngineDescriptor = {
+        name: 'LBM-D2Q9',
+        version: '1.0.0',
+        faces: [{ name: 'fi', type: 'population', isSynchronized: true }],
+        parameters: {},
+        rules: [],
+        outputs: [],
+        requirements: { ghostCells: 1, pingPong: true }
+    };
+
+    const config: HypercubeConfig = {
+        dimensions: { nx: 32, ny: 32, nz: 1 },
+        chunks: { x: 2, y: 2 }, // 2x2 grid of 16x16 chunks
+        boundaries: { all: { role: 'periodic' } },
+        engine: 'LBM-D2Q9',
+        params: {},
+        mode: 'cpu'
+    };
+
+    const vGrid = new VirtualGrid(config, lbmDescriptor);
+    const mBuffer = new MasterBuffer(vGrid);
+    const synchronizer = new BoundarySynchronizer();
+
+    it('should seamlessly wrap left/right world edges', () => {
+        const c0_0 = mBuffer.getChunkViews('chunk_0_0_0'); // Top-Left
+        const c1_0 = mBuffer.getChunkViews('chunk_1_0_0'); // Top-Right
+
+        const fi_0 = c0_0.faces[0];
+        const fi_1 = c1_0.faces[0];
+
+        // Write to Rightmost real cell of c1_0
+        const nx = 16;
+        const pNx = 18;
+        fi_1[8 * pNx + nx] = 77;
+
+        synchronizer.syncAll(vGrid, mBuffer);
+
+        // c0_0's Leftmost ghost cell (0) should receive it
+        expect(fi_0[8 * pNx + 0]).toBe(77);
+    });
+
+    it('should seamlessly wrap diagonal world corners', () => {
+        const c0_0 = mBuffer.getChunkViews('chunk_0_0_0'); // Top-Left
+        const c1_1 = mBuffer.getChunkViews('chunk_1_1_0'); // Bottom-Right
+
+        const fi_0 = c0_0.faces[0];
+        const fi_1_1 = c1_1.faces[0];
+
+        const nx = 16;
+        const ny = 16;
+        const pNx = 18;
+
+        // Write to Bottom-Right real cell of the entire world (c1_1)
+        fi_1_1[ny * pNx + nx] = 88;
+
+        synchronizer.syncAll(vGrid, mBuffer);
+
+        // It should wrap around to the Top-Left ghost cell of the entire world (c0_0)
+        expect(fi_0[0 * pNx + 0]).toBe(88);
     });
 });

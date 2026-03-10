@@ -36,7 +36,23 @@ export class VirtualGrid implements IVirtualGrid {
     }
 
     findChunkAt(x: number, y: number, z: number = 0): VirtualChunk | undefined {
-        return this.chunks.find(c => c.x === x && c.y === y && c.z === z);
+        let qx = x, qy = y, qz = z;
+
+        const b = this.config.boundaries;
+        if (b) {
+            if (b.left?.role === 'periodic' || b.all?.role === 'periodic') {
+                qx = (x + this.config.chunks.x) % this.config.chunks.x;
+            }
+            if (b.top?.role === 'periodic' || b.all?.role === 'periodic') {
+                qy = (y + this.config.chunks.y) % this.config.chunks.y;
+            }
+            if (b.front?.role === 'periodic' || b.all?.role === 'periodic') {
+                const nz = this.config.chunks.z ?? 1;
+                qz = (z + nz) % nz;
+            }
+        }
+
+        return this.chunks.find(c => c.x === qx && c.y === qy && c.z === qz);
     }
 
     /**

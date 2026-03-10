@@ -4,10 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neo Aero (CPU)</title>
+    <title>Neo Ocean (CPU)</title>
     <style>
         :root {
-            --primary: #00f2ff;
+            --primary: #0088ff;
             --bg: #020408;
             --hud-bg: rgba(2, 4, 8, 0.7);
         }
@@ -24,22 +24,8 @@
             overflow: hidden;
         }
 
-        #canvas-container {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: radial-gradient(circle at center, #0a0e1a 0%, #020408 100%);
-        }
-
         canvas {
-            max-width: 95vw;
-            max-height: 95vh;
-            border-radius: 4px;
-            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), 0 0 2px rgba(255, 255, 255, 0.1);
             image-rendering: pixelated;
-            /* Sharp rendering for simulation */
         }
 
         #hud {
@@ -97,22 +83,13 @@
 </head>
 
 <body>
-    <div id="hud">
-        <div class="hud-item">
-            <div class="hud-label">Engine</div>
-            <div class="hud-value">Neo Aero (CPU)</div>
-        </div>
-        <div class="hud-item">
-            <div class="hud-label">Performance</div>
-            <div id="fps-counter" class="hud-value">-- FPS</div>
-        </div>
-    </div>
+    <!-- BenchmarkHUD is injected by script -->
 
     <a href="../index.html" class="back-link">← HUB</a>
 
-    <div id="canvas-container"></div>
+    <!-- Canvas is injected by script -->
 
-    <script type="module" src="./main.ts"></script>
+    <script type="module" src="./ocean.ts"></script>
 </body>
 
 </html>

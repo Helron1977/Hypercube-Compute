@@ -1,15 +1,16 @@
 import { KernelRegistry } from './KernelRegistry';
+import { LBMSmokeKernel } from './LBMSmokeKernel';
 import { DiffusionKernel } from './DiffusionKernel';
 import { AdvectionKernel } from './AdvectionKernel';
 import { ForceKernel } from './ForceKernel';
 import { LBMD2Q9Kernel } from './LBMKernel';
 import { LBMMacroKernel } from './LBMMacroKernel';
-import { LBMSmokeKernel } from './LBMSmokeKernel';
 import { NeoAeroKernel } from './NeoAeroKernel';
+import { NeoOceanKernel } from './NeoOceanKernel';
 
 /**
- * Initializes the default set of kernels for the Hypercube Neo engine.
- * Must be called in every thread (Main and Worker) that uses the KernelRegistry.
+ * Initializes the default set of CPU kernels for the Hypercube Neo engine.
+ * These are the standard "rules" available in manifests.
  */
 export function initializeKernels(): void {
     KernelRegistry.register('diffusion', new DiffusionKernel());
@@ -19,4 +20,5 @@ export function initializeKernels(): void {
     KernelRegistry.register('lbm-macro', new LBMMacroKernel());
     KernelRegistry.register('lbm-smoke', new LBMSmokeKernel());
     KernelRegistry.register('lbm-aero-fidelity-v1', new NeoAeroKernel());
+    KernelRegistry.register('lbm-ocean-v1', new NeoOceanKernel());
 }

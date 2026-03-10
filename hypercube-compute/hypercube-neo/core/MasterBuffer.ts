@@ -113,6 +113,43 @@ export class MasterBuffer implements IMasterBuffer {
     }
 
     /**
+     * Read back only specific faces from the GPU.
+     * Dramatically reduces VRAM->RAM bandwidth stall.
+     */
+    public async syncFacesToHost(faceIndices: number[]): Promise<void> {
+        if (!this.gpuBuffer) return;
+        const copySize = this.strideFace * 4;
+
+        // Create staging buffers for the required faces
+        const stagingBuffers = faceIndices.map(() => HypercubeGPUContext.device.createBuffer({
+            size: copySize,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+        }));
+
+        const encoder = HypercubeGPUContext.device.createCommandEncoder();
+
+        // Command the GPU to copy each face into its respective staging buffer
+        faceIndices.forEach((fIdx, i) => {
+            // Note: Since chunks are contiguous, if we had multiple chunks we'd need multiple copies or a sparse readback.
+            // For GPU zero-stall, we typically operate on 1 chunk. We'll copy the face block directly.
+            // A more robust implementation would iterate chunks. Assuming 1 chunk.
+            encoder.copyBufferToBuffer(this.gpuBuffer!, fIdx * copySize, stagingBuffers[i], 0, copySize);
+        });
+
+        HypercubeGPUContext.device.queue.submit([encoder.finish()]);
+
+        await Promise.all(stagingBuffers.map(b => b.mapAsync(GPUMapMode.READ)));
+
+        faceIndices.forEach((fIdx, i) => {
+            const data = new Float32Array(stagingBuffers[i].getMappedRange());
+            const cpuView = new Float32Array(this.rawBuffer, fIdx * copySize, this.strideFace);
+            cpuView.set(data);
+            stagingBuffers[i].unmap();
+            stagingBuffers[i].destroy();
+        });
+    }
+
+    /**
      * Copy data from the CPU ArrayBuffer to the GPU buffer.
      * Used for initial rasterization or dynamic object injection in some modes.
      */

@@ -10,7 +10,8 @@
     "dev": "tsup src/index.ts src/core/cpu/cpu.worker.ts --format cjs,esm --dts --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "showcase": "vite"
+    "showcase": "vite",
+    "neo:showcase": "vite --config hypercube-neo/vite.config.ts"
   },
   "keywords": [
     "tensor",

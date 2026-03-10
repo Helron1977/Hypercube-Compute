@@ -5,7 +5,7 @@ Hypercube Neo is the high-performance, autonomous evolution of the Hypercube Com
 ## 🚀 Key Features
 
 - **Unified Manifest**: Define your engine, grid configuration, and visual profile in a single JSON file.
-- **Autonomous Architecture**: Zero dependencies on legacy v4/v8 folders.
+- **Autonomous Architecture**: Zero dependencies on legacy v4/v8 folders. Fully self-contained.
 - **Hybrid Execution**: 
   - **CPU (Multi-Threaded)**: Optimized LBM and Stencil kernels for modern processors via Web Workers and SharedArrayBuffers.
   - **GPU (WebGPU)**: Direct VRAM-to-VRAM computation with compute shaders, eliminating CPU-GPU bottlenecks.
@@ -16,9 +16,10 @@ Hypercube Neo is the high-performance, autonomous evolution of the Hypercube Com
 - `/core`: The heart of the engine (MasterBuffer, Dispatchers, Factory).
   - `/gpu`: Dedicated WebGPU context and pipeline management.
   - `/kernels`: Pure numerical algorithms (LBM, Advection, Diffusion).
-- `/io`: Input/Output adapters (WebHooks, Canvas Rendering).
-- `/showcase`: Dedicated demo hub for Neo simulations.
+- `/io`: Input/Output adapters (WebHooks, Canvas Rendering, IsoRendererNeo).
+- `/showcase`: Dedicated demo hub for Neo simulations (`cpu` and `gpu` examples).
 - `/tests`: Fidelity and orchestration validation suite.
+- `/docs`: Centralized documentation for Neo's architecture and showrooms.
 
 ## 🛠️ Usage for Novices
 
@@ -35,12 +36,16 @@ A manifest tells Neo:
 import { HypercubeNeoFactory } from './core/HypercubeNeoFactory';
 
 const factory = new HypercubeNeoFactory();
-const engine = await factory.build(config, descriptor); // Auto-detects CPU/GPU mode
+const manifest = await factory.fromManifest('./showcase-ocean-cpu.json');
+const engine = await factory.build(manifest.config, manifest.engine); // Auto-detects CPU/GPU mode
 await engine.step(); // Execute one physics frame
 ```
 
-## 🌪️ Showcase: Aerodynamics
-Check the [Aero Showcase Guide](../docs/neo/showcase-aero.md) for a deep dive into parameterizing fluid dynamics.
+## 🌪️ Showcases
+
+Learn how to configure your manifestations realistically:
+- **[Aero Showcase Guide](./docs/showcase-aero.md)**: Deep dive into parameterizing fluid dynamics (LBM D2Q9) and wind tunnels.
+- **[Ocean Showcase Guide](./docs/showcase-ocean.md)**: Understand 2.5D LBM boundaries, bio-advection and fluid height settings on topological grids.
 
 ---
 *Hypercube Neo is part of the MonOs Cognitive Copilot ecosystem.*

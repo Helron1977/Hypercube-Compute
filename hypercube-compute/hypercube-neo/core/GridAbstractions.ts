@@ -80,6 +80,11 @@ export interface IMasterBuffer {
      * Copy data from GPU back to the CPU ArrayBuffer.
      */
     syncToHost(): Promise<void>;
+
+    /**
+     * Copy specific faces from GPU back to the CPU ArrayBuffer.
+     */
+    syncFacesToHost(faceIndices: number[]): Promise<void>;
 }
 
 /**

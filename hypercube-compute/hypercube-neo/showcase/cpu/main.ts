@@ -1,53 +1,90 @@
 import { HypercubeNeoFactory } from '../../core/HypercubeNeoFactory';
-import { CanvasAdapterNeo } from '../../io/CanvasAdapterNeo';
+import { NacaHelper } from '../../helpers/ShapeHelpers';
+import { HypercubeNeo } from '../../HypercubeNeo';
 
-async function launch() {
-    // 1. Load Manifest
-    const manifestUrl = '/examples/showcase-aero-v1.json';
-    const response = await fetch(manifestUrl);
-    const manifest = await response.json();
-
-    // Force CPU mode for this showcase
-    manifest.config.mode = 'cpu';
-    manifest.config.executionMode = 'parallel';
-
-    // 2. Build Engine via Neo Factory
+/**
+ * Neo Aero (CPU) Orchestrator
+ * Migrated from examples/11-neo-fluid.ts
+ */
+async function main() {
     const factory = new HypercubeNeoFactory();
-    const engine = await factory.build(manifest.config, manifest.engine);
 
-    // 3. Setup Visualization
+    // 1. Generate NACA Wings (Biplane signature)
+    const wingPoints = NacaHelper.generateNaca4(0.00, 0.0, 0.16, 80, 120, -12 * Math.PI / 180);
+
+    // 2. Load Manifest from local showcase root
+    const manifest = await factory.fromManifest('../showcase-aero-v1.json');
+    const { config, engine: descriptor } = manifest;
+
+    // Inject dynamic NACA points
+    const wingTop = config.objects?.find((o: any) => o.id === 'wing_top');
+    if (wingTop) wingTop.points = wingPoints;
+    const wingBottom = config.objects?.find((o: any) => o.id === 'wing_bottom');
+    if (wingBottom) wingBottom.points = wingPoints;
+
+    // 3. Build Engine
+    const engine = await factory.build(config, descriptor);
+
+    const NX = config.dimensions.nx;
+    const NY = config.dimensions.ny;
+
+    // 4. Setup Containers
     const container = document.getElementById('canvas-container')!;
     const canvas = document.createElement('canvas');
+    canvas.width = NX;
+    canvas.height = NY;
     container.appendChild(canvas);
 
-    // 4. Main Loop
+    const fpsElem = document.getElementById('fps-counter');
+
+    let isInitialized = false;
+    let frameCount = 0;
     let lastTime = performance.now();
-    let frames = 0;
-    const fpsElement = document.getElementById('fps-counter')!;
 
-    async function step(t: number) {
-        await engine.step(t / 1000);
+    async function loop() {
+        try {
+            // physics step
+            await engine.step(1);
 
-        // Static render call
-        CanvasAdapterNeo.render(engine as any, canvas, {
-            faceIndex: 0,
-            vorticityFace: 1,
-            obstaclesFace: 2,
-            colormap: 'arctic'
-        });
+            // One-time initialization logic to remove the static grid_init object
+            if (!isInitialized) {
+                if (config.objects && config.objects[0].id === 'grid_init') {
+                    config.objects.shift();
+                    isInitialized = true;
+                }
+            }
 
-        frames++;
-        const now = performance.now();
-        if (now - lastTime > 1000) {
-            fpsElement.innerText = `${frames} FPS`;
-            frames = 0;
-            lastTime = now;
+            // Sync indices for rendering
+            const smokeIdx = engine.parityManager.getFaceIndices('smoke').read;
+            const obsIdx = engine.parityManager.getFaceIndices('obstacles').read;
+            const vortIdx = engine.parityManager.getFaceIndices('vorticity').read;
+
+            // Render via Neo adapter
+            HypercubeNeo.autoRender(engine, canvas, {
+                faceIndex: smokeIdx,
+                colormap: 'arctic',
+                minVal: 0.0,
+                maxVal: 1.0,
+                obstaclesFace: obsIdx,
+                vorticityFace: vortIdx
+            });
+
+            // Update FPS
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                if (fpsElem) fpsElem.innerText = `${frameCount} FPS`;
+                frameCount = 0;
+                lastTime = now;
+            }
+
+            requestAnimationFrame(loop);
+        } catch (e) {
+            console.error("Simulation loop error:", e);
         }
-
-        requestAnimationFrame(step);
     }
 
-    requestAnimationFrame(step);
+    loop();
 }
 
-launch().catch(console.error);
+main().catch(console.error);

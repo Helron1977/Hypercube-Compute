@@ -85,14 +85,20 @@ export class GpuDispatcher implements IDispatcher {
                 u32Data[base + 1] = this.vGrid.dimensions.ny;
                 u32Data[base + 2] = this.vGrid.chunkLayout.x;
                 u32Data[base + 3] = this.vGrid.chunkLayout.y;
-                f32[base + 4] = (scheme.params?.omega as number) || 1.75;
-                f32[base + 5] = (scheme.params?.inflowUx as number) || 0.15;
+                f32[base + 4] = (scheme.params?.omega as number) ?? (scheme.params?.tau_0 as number) ?? 1.75;
+                f32[base + 5] = (scheme.params?.inflowUx as number) ?? (scheme.params?.cflLimit as number) ?? 0.15;
                 f32[base + 6] = t;
                 u32Data[base + 7] = this.parityManager.currentTick;
                 u32Data[base + 8] = vChunk.x;
                 u32Data[base + 9] = vChunk.y;
                 u32Data[base + 10] = mBuf.strideFace;
                 u32Data[base + 11] = grid.config.objects?.length || 0;
+
+                // Extra generic floats packed in padding
+                f32[base + 12] = (scheme.params?.bioDiffusion as number) ?? 0.0;
+                f32[base + 13] = (scheme.params?.bioGrowth as number) ?? 0.0;
+                f32[base + 14] = 0.0;
+                f32[base + 15] = 0.0;
 
                 // Pack up to 8 objects (starting at base + 16, each taking 8 words/32 bytes)
                 const objects = grid.config.objects || [];
@@ -104,10 +110,10 @@ export class GpuDispatcher implements IDispatcher {
                     f32[objBase + 1] = obj.position.y;
                     f32[objBase + 2] = obj.dimensions.w;
                     f32[objBase + 3] = obj.dimensions.h;
-                    f32[objBase + 4] = obj.properties.isObstacle || 0;
-                    f32[objBase + 5] = obj.properties.isSmoke || 0;
+                    f32[objBase + 4] = obj.properties.isObstacle ?? obj.properties.obstacles ?? 0;
+                    f32[objBase + 5] = obj.properties.isSmoke ?? obj.properties.smoke ?? obj.properties.biology ?? 0;
                     u32Data[objBase + 6] = (obj.type === 'circle' ? 1 : (obj.type === 'rect' ? 2 : 0));
-                    // u32Data[objBase + 7] is padding
+                    f32[objBase + 7] = obj.properties.rho ?? 0;
                 }
             }
             this.device.queue.writeBuffer(this.uniformBuffer!, 0, u32Data);

@@ -1,0 +1,192 @@
+{
+    "$schema": "https://hypercube-neo.dev/schema/v4.json",
+    "name": "Ocean Showcase 02 - 2.5D Isometric Wave Equation",
+    "version": "1.0.0",
+    "engine": {
+        "name": "Ocean-2.5D",
+        "version": "1.0.0",
+        "faces": [
+            {
+                "name": "f0",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "f1",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "f2",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "f3",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "f4",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "f5",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "f6",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "f7",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "f8",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            },
+            {
+                "name": "obstacles",
+                "type": "mask",
+                "isSynchronized": true,
+                "isReadOnly": true
+            },
+            {
+                "name": "vx",
+                "type": "scalar",
+                "isSynchronized": false,
+                "isPersistent": false
+            },
+            {
+                "name": "vy",
+                "type": "scalar",
+                "isSynchronized": false,
+                "isPersistent": false
+            },
+            {
+                "name": "vz",
+                "type": "scalar",
+                "isSynchronized": false,
+                "isPersistent": false
+            },
+            {
+                "name": "rho",
+                "type": "scalar",
+                "isSynchronized": false,
+                "isPersistent": false
+            },
+            {
+                "name": "biology",
+                "type": "scalar",
+                "isSynchronized": true,
+                "isPersistent": false
+            }
+        ],
+        "rules": [
+            {
+                "type": "lbm-ocean-v1",
+                "method": "OceanPhysics",
+                "source": "f0",
+                "params": {
+                    "tau_0": 0.8,
+                    "cflLimit": 0.38,
+                    "bioDiffusion": 0.05,
+                    "bioGrowth": 0.0005
+                }
+            }
+        ],
+        "requirements": {
+            "ghostCells": 1,
+            "pingPong": true
+        },
+        "parameters": {},
+        "outputs": []
+    },
+    "config": {
+        "dimensions": {
+            "nx": 512,
+            "ny": 512,
+            "nz": 1
+        },
+        "chunks": {
+            "x": 2,
+            "y": 2
+        },
+        "boundaries": {
+            "all": {
+                "role": "wall"
+            }
+        },
+        "mode": "cpu",
+        "executionMode": "parallel",
+        "objects": [
+            {
+                "id": "grid_init",
+                "type": "rect",
+                "position": {
+                    "x": 0,
+                    "y": 0
+                },
+                "dimensions": {
+                    "w": 512,
+                    "h": 512
+                },
+                "properties": {
+                    "rho": 1.0,
+                    "f0": 0.44444,
+                    "f1": 0.11111,
+                    "f2": 0.11111,
+                    "f3": 0.11111,
+                    "f4": 0.11111,
+                    "f5": 0.02777,
+                    "f6": 0.02777,
+                    "f7": 0.02777,
+                    "f8": 0.02777,
+                    "biology": 0.0
+                },
+                "rasterMode": "replace"
+            },
+            {
+                "id": "splash_init",
+                "type": "circle",
+                "position": {
+                    "x": 246,
+                    "y": 246
+                },
+                "dimensions": {
+                    "w": 20,
+                    "h": 20
+                },
+                "properties": {
+                    "rho": 2.0,
+                    "f0": 0.8,
+                    "f1": 0.2,
+                    "f2": 0.2,
+                    "f3": 0.2,
+                    "f4": 0.2,
+                    "f5": 0.05,
+                    "f6": 0.05,
+                    "f7": 0.05,
+                    "f8": 0.05,
+                    "biology": 1.0
+                },
+                "rasterMode": "replace"
+            }
+        ]
+    }
+}

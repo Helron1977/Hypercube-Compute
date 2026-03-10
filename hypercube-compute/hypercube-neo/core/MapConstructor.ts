@@ -82,6 +82,22 @@ export class MapConstructor implements IMapConstructor {
         // If not internal, it's a world boundary.
         // We use the global boundaries or fallback to 'wall' if not defined.
         const boundarySide = globalBoundaries[face] || globalBoundaries.all || { role: 'wall' };
-        return { role: boundarySide.role, face };
+        let role = boundarySide.role;
+        let periodicNeighborId: string | undefined;
+
+        if (role === 'periodic') {
+            role = 'joint';
+            switch (face) {
+                case 'left': periodicNeighborId = `chunk_${numX - 1}_${cy}_${cz}`; break;
+                case 'right': periodicNeighborId = `chunk_0_${cy}_${cz}`; break;
+                case 'top': periodicNeighborId = `chunk_${cx}_${numY - 1}_${cz}`; break;
+                case 'bottom': periodicNeighborId = `chunk_${cx}_0_${cz}`; break;
+                case 'front': periodicNeighborId = `chunk_${cx}_${cy}_${numZ - 1}`; break;
+                case 'back': periodicNeighborId = `chunk_${cx}_${cy}_0`; break;
+            }
+            return { role, face, neighborId: periodicNeighborId };
+        }
+
+        return { role, face };
     }
 }

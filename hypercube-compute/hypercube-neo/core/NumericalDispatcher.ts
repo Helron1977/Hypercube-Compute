@@ -33,6 +33,7 @@ export class NumericalDispatcher implements IDispatcher {
         const kernelParams = {
             dimensions: this.vGrid.dimensions,
             chunks: this.vGrid.chunkLayout,
+            boundaries: grid.config?.boundaries,
             time: t,
             tick: this.parityManager.currentTick
         };
