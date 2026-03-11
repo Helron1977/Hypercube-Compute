@@ -40,7 +40,7 @@ export interface EngineFace {
 }
 
 export interface NumericalScheme {
-    type: 'lbm-d2q9' | 'lbm-macro' | 'lbm-smoke' | 'lbm-aero-fidelity-v1' | 'advection' | 'diffusion' | 'reaction' | 'stencil' | 'custom' | 'force';
+    type: 'lbm-d2q9' | 'lbm-macro' | 'lbm-smoke' | 'lbm-aero-fidelity-v1' | 'advection' | 'diffusion' | 'reaction' | 'stencil' | 'custom' | 'force' | 'neo-heatmap' | 'neo-sdf';
     method?: 'Upwind' | 'Semi-Lagrangian' | 'Explicit-Euler' | 'Custom' | 'Force' | 'Direct';
     source: string; // Face name
     destination?: string;

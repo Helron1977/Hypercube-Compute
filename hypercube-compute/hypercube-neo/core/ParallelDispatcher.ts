@@ -99,7 +99,7 @@ export class ParallelDispatcher implements IDispatcher {
                     type: 'COMPUTE',
                     payload: {
                         chunk: vChunk,
-                        scheme: descriptor.rules[0],
+                        schemes: descriptor.rules,
                         indices: faceIndices,
                         params: kernelParams,
                         viewsData

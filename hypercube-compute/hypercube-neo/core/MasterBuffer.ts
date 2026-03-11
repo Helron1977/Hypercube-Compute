@@ -165,4 +165,27 @@ export class MasterBuffer implements IMasterBuffer {
         }
         return views;
     }
+
+    public setFaceData(chunkId: string, faceName: string, data: Float32Array | number[]): void {
+        const views = this.getChunkViews(chunkId);
+        const dataContract = (this.vGrid as any).dataContract as DataContract;
+        const descriptor = dataContract.descriptor;
+        const faceIdx = descriptor.faces.findIndex((f: any) => f.name === faceName);
+
+        if (faceIdx === -1) {
+            console.error(`MasterBuffer: Face '${faceName}' not found in descriptor.`);
+            return;
+        }
+
+        // Determine actual index in the faceViews array (accounting for ping-pong)
+        const faceMappings = dataContract.getFaceMappings();
+        let bufIdx = 0;
+        for (let i = 0; i < faceIdx; i++) {
+            bufIdx += faceMappings[i].isPingPong ? 2 : 1;
+        }
+
+        // We target the current 'read' buffer for initial topology setup
+        views.faces[bufIdx].set(data as any);
+        console.log(`MasterBuffer: Painted ${data.length} cells into face '${faceName}' of chunk '${chunkId}'.`);
+    }
 }

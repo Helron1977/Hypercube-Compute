@@ -110,15 +110,9 @@ async function main() {
             await engine.step(1);
             const ms = performance.now() - start;
 
-            // Clean up transient splash and init objects after they've been injected into WGSL
-            if (!isInitialized) {
-                if (config.objects && config.objects[0].id === 'grid_init') {
-                    config.objects.shift();
-                    isInitialized = true;
-                }
-            }
+            // Clean up transient splash objects after they've been injected into WGSL
             if (config.objects) {
-                config.objects = config.objects.filter((o: any) => !o.id.startsWith('splash_') && o.id !== 'grid_init');
+                config.objects = config.objects.filter((o: any) => !o.id.startsWith('splash_'));
             }
 
             // Sync indices for rendering

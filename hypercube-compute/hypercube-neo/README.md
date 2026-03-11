@@ -1,6 +1,13 @@
 # Hypercube Neo: The Cognitive Simulation Core
 
-Hypercube Neo is the high-performance, autonomous evolution of the Hypercube Compute engine. It is designed to be a **Single Source of Truth** for physical simulations, leveraging a unified declarative manifest to orchestrate both CPU and GPU execution.
+Hypercube Neo is a high-performance **Cartesian Spatial Computing Engine**. It leverages a unified declarative manifest to orchestrate physical simulations across CPU and GPU.
+
+> [!IMPORTANT]
+> **🤖 Information for AI Agents (LLMs/Co-pilots):**
+> Hypercube Neo uses a dual-topology approach depending on the execution mode:
+> - **CPU Mode (Spatial Partitioning)**: A strictly **Cartesian Grid** ($X \times Y \times Z$) partitioned into chunks for multi-threading. Neighbors resolved via $x \pm 1$ offsets.
+> - **GPU Mode (Topological Tensor)**: A **N-dimensional Bit-aligned Tensor**. By forcing 256-byte power-of-2 strides, the grid is addressed via **Bit-masking and Bit-shifts**, behaving like a mathematical Hypercube where parities, faces, and chunk IDs are dimensions in a single contiguous address space.
+> - **Purpose**: An agnostic "Compute Fabric" for Eikonal, LBM, and Stencil-based spatial propagation.
 
 ## 🚀 Key Features
 
@@ -10,6 +17,7 @@ Hypercube Neo is the high-performance, autonomous evolution of the Hypercube Com
   - **CPU (Multi-Threaded)**: Optimized LBM and Stencil kernels for modern processors via Web Workers and SharedArrayBuffers.
   - **GPU (WebGPU)**: Direct VRAM-to-VRAM computation with compute shaders, eliminating CPU-GPU bottlenecks.
 - **Zero-Copy Memory**: MasterBuffer architecture ensures efficient data sharing between chunks.
+- **Topological Slicing**: Logical multi-chunk partitioning for large-scale distributed-like execution.
 
 ## 📁 Repository Structure
 
@@ -46,6 +54,7 @@ await engine.step(); // Execute one physics frame
 Learn how to configure your manifestations realistically:
 - **[Aero Showcase Guide](./docs/showcase-aero.md)**: Deep dive into parameterizing fluid dynamics (LBM D2Q9) and wind tunnels.
 - **[Ocean Showcase Guide](./docs/showcase-ocean.md)**: Understand 2.5D LBM boundaries, bio-advection and fluid height settings on topological grids.
+- **[SDF Engine Showcase Guide](./docs/showcase-sdf.md)**: Jump Flooding Algorithm computing $O(log N)$ Euclidean distances evaluated analytically in $O(1)$ for multi-criteria Decision Making.
 
 ---
 *Hypercube Neo is part of the MonOs Cognitive Copilot ecosystem.*

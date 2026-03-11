@@ -46,6 +46,15 @@ export class WebGpuIsoRendererNeo {
         const device = HypercubeGPUContext.device;
 
         const shaderCode = `
+            struct GpuObject {
+                pos: vec2<f32>,
+                dim: vec2<f32>,
+                isObstacle: f32,
+                biology: f32,
+                objType: u32,
+                rho: f32,
+            };
+
             struct Uniforms {
                 nx: u32,
                 ny: u32,
@@ -58,7 +67,8 @@ export class WebGpuIsoRendererNeo {
                 strideFace: u32,
                 canvasWidth: f32,
                 canvasHeight: f32,
-                pad: f32,
+                numObjects: u32,
+                objects: array<GpuObject, 8>,
             };
 
             @group(0) @binding(0) var<storage, read> cube: array<f32>;
@@ -88,6 +98,23 @@ export class WebGpuIsoRendererNeo {
                     if (cube[config.obsIdx * config.strideFace + srcIdx] > 0.5) {
                         isObs = true;
                     }
+                }
+                
+                // Dynamic Objects Check
+                for (var j = 0u; j < config.numObjects; j = j + 1u) {
+                    let obj = config.objects[j];
+                    if (obj.isObstacle < 0.5) { continue; }
+                    var inObj = false;
+                    if (obj.objType == 1u) { // Circle
+                        let r = obj.dim.x * 0.5;
+                        let ddx = f32(lx) - obj.pos.x;
+                        let ddy = f32(ly) - obj.pos.y;
+                        if (ddx*ddx + ddy*ddy <= r*r) { inObj = true; }
+                    } else if (obj.objType == 2u) { // Rect
+                        if (f32(lx) >= obj.pos.x && f32(lx) <= obj.pos.x + obj.dim.x &&
+                            f32(ly) >= obj.pos.y && f32(ly) <= obj.pos.y + obj.dim.y) { inObj = true; }
+                    }
+                    if (inObj) { isObs = true; break; }
                 }
                 
                 if (rawVal < 0.01 && !isObs) {
@@ -174,7 +201,7 @@ export class WebGpuIsoRendererNeo {
         });
 
         this.uniformBuffer = device.createBuffer({
-            size: 64, // 12 * 4 bytes + padding
+            size: 512, // Enough for parameters + 8 objects
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
     }
@@ -210,7 +237,7 @@ export class WebGpuIsoRendererNeo {
         const ny = vGrid.dimensions.ny;
 
         // Setup Uniforms
-        const u32Data = new Uint32Array(12);
+        const u32Data = new Uint32Array(128); // Expanded
         const f32Data = new Float32Array(u32Data.buffer);
 
         const vNX = nx - 2;
@@ -229,7 +256,23 @@ export class WebGpuIsoRendererNeo {
         u32Data[8] = mBuffer.strideFace;
         f32Data[9] = this.canvas.width;
         f32Data[10] = this.canvas.height;
-        f32Data[11] = 0; // padding
+
+        const objects = (proxy.vGrid as any).config.objects || [];
+        u32Data[11] = Math.min(objects.length, 8);
+
+        // Pack Objects (base 12, each obj 8 words)
+        for (let j = 0; j < Math.min(objects.length, 8); j++) {
+            const objBase = 12 + j * 8;
+            const obj = objects[j];
+            f32Data[objBase + 0] = obj.position.x;
+            f32Data[objBase + 1] = obj.position.y;
+            f32Data[objBase + 2] = obj.dimensions.w;
+            f32Data[objBase + 3] = obj.dimensions.h;
+            f32Data[objBase + 4] = obj.properties.isObstacle ?? 0;
+            f32Data[objBase + 5] = obj.properties.biology ?? 0;
+            u32Data[objBase + 6] = (obj.type === 'circle' ? 1 : (obj.type === 'rect' ? 2 : 0));
+            f32Data[objBase + 7] = obj.properties.rho ?? 0;
+        }
 
         HypercubeGPUContext.device.queue.writeBuffer(this.uniformBuffer!, 0, u32Data);
 

@@ -104,3 +104,50 @@ Cet océan CPU tire parti du nouveau moteur **Hypercube Neo V4**. Si vous indiqu
 
 Hypercube va instancier **4 Web Workers** dédiés en parallèle. Le `BoundarySynchronizer` injectera nativement les populations `f` frontalières d'un serveur à l'autre sans que le noyau mathématique `NeoOceanKernel` ne s'en aperçoive.
 Ceci vous permet de simuler des océans LBM à une vitesse impossible pour le fil principal du navigateur Javascript.
+
+---
+
+## ⚡ Mode GPU & Rendu Zero-Stall (High-Res)
+
+Pour les simulations massives (512x512 et plus), le mode **GPU (WebGPU)** est recommandé.
+
+![Démonstration de l'Océan GPU à 60 FPS](./media/ocean-gpu-demo.webp)
+*Simulation 512x512 tournant intégralement en VRAM avec le renderer WebGPU natif.*
+
+### 1. Pourquoi le mode GPU ?
+Contrairement au mode CPU qui doit synchroniser des morceaux de mémoire (chunks), le mode GPU traite l'océan comme un **bloc monolithique en VRAM**. 
+- **Zéro Goulot d'étranglement** : Le calcul physique (LBM) et le rendu 2.5D se font sur la carte graphique. Aucune donnée ne circule vers le processeur (CPU) pendant la boucle de simulation.
+- **Rendu Instancié** : Chaque cellule de l'océan est dessinée comme un cube 3D indépendant par le GPU, permettant une netteté parfaite sans sacrifier le framerate.
+
+### 2. Configuration GPU
+Il suffit de changer le `mode` dans votre manifeste :
+```json
+{
+    "config": {
+        "mode": "gpu",
+        "chunks": { "x": 1, "y": 1 }
+    }
+}
+```
+
+---
+
+## 🏰 Import de Topologie (Game Developers)
+
+Hypercube Neo n'est pas limité à des ondes circulaires. Vous pouvez importer des **mondes complexes**.
+
+### L'API `setFaceData`
+Pour les développeurs souhaitant intégrer Hypercube dans un jeu vidéo, vous pouvez injecter directement une image de topographie (Heightmap) :
+
+```typescript
+// On récupère les données d'une image de 512x512
+const obstaclesMap = myImageLoader.getBuffer(); 
+
+// On "peint" la topologie directement dans le MasterBuffer du GPU
+engine.mBuffer.setFaceData('chunk_0', 'obstacles', obstaclesMap);
+```
+
+**Applications :**
+- **Labyrinthes sous-marins** : L'eau rebondira sur chaque mur dessiné.
+- **Îles et Côtes** : Importez votre carte du monde pour voir comment les vagues de tempête impactent vos rivages.
+- **Bathymétrie** : Définissez les zones de profondeur pour influencer physiquement la vitesse des ondes.

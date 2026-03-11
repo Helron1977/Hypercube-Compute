@@ -66,6 +66,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     // --- Dynamic Inputs (Splash Injections) ---
     var bioInjection = 0.0;
     var rhoInjection = 0.0;
+    var obs = data[obsIdx];
     
     for (var j = 0u; j < params.numObjects; j = j + 1u) {
         let obj = params.objects[j];
@@ -82,11 +83,11 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         if (inObj) { 
             bioInjection = max(bioInjection, obj.biology);
             rhoInjection = max(rhoInjection, obj.rho);
+            if (obj.isObstacle > 0.5) { obs = 1.0; }
         }
     }
 
     // --- LBM Physics (Bounce-Back Pull-Scheme) ---
-    var obs = data[obsIdx];
     var pf = array<f32, 9>();
     
     // Check World Boundaries (Clamp To Edge)

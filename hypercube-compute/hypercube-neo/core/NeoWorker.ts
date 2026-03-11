@@ -22,14 +22,25 @@ self.onmessage = async (e: MessageEvent) => {
 
         case 'COMPUTE':
             if (!sharedBuffer) return;
-            const { chunk, scheme, indices, params, viewsData } = payload;
+            const { chunk, schemes, indices, params, viewsData } = payload;
 
             // Reconstruct views from SharedArrayBuffer offsets
             const physicalViews = viewsData.map((v: any) => new Float32Array(sharedBuffer!, v.offset, v.length));
 
-            const kernel = KernelRegistry.get(scheme.type);
-            if (kernel) {
-                kernel.execute(physicalViews, scheme, indices, params, chunk);
+            if (Array.isArray(schemes)) {
+                for (const scheme of schemes) {
+                    const kernel = KernelRegistry.get(scheme.type);
+                    if (kernel) {
+                        kernel.execute(physicalViews, scheme, indices, params, chunk);
+                    }
+                }
+            } else {
+                // Fallback for older messages if any
+                const scheme = (payload as any).scheme;
+                const kernel = KernelRegistry.get(scheme.type);
+                if (kernel) {
+                    kernel.execute(physicalViews, scheme, indices, params, chunk);
+                }
             }
 
             self.postMessage({ type: 'DONE', chunkId: chunk.id });

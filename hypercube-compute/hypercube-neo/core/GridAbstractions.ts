@@ -77,6 +77,12 @@ export interface IMasterBuffer {
     syncToDevice(): void;
 
     /**
+     * Direct buffer injection for a specific face.
+     * Useful for importing high-resolution topology maps (heightmaps, obstacles).
+     */
+    setFaceData(chunkId: string, faceName: string, data: Float32Array | number[]): void;
+
+    /**
      * Copy data from GPU back to the CPU ArrayBuffer.
      */
     syncToHost(): Promise<void>;

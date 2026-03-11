@@ -7,6 +7,8 @@ import { LBMD2Q9Kernel } from './LBMKernel';
 import { LBMMacroKernel } from './LBMMacroKernel';
 import { NeoAeroKernel } from './NeoAeroKernel';
 import { NeoOceanKernel } from './NeoOceanKernel';
+import { NeoHeatmapKernel } from './NeoHeatmapKernel';
+import { NeoSDFKernel } from './NeoSDFKernel';
 
 /**
  * Initializes the default set of CPU kernels for the Hypercube Neo engine.
@@ -21,4 +23,6 @@ export function initializeKernels(): void {
     KernelRegistry.register('lbm-smoke', new LBMSmokeKernel());
     KernelRegistry.register('lbm-aero-fidelity-v1', new NeoAeroKernel());
     KernelRegistry.register('lbm-ocean-v1', new NeoOceanKernel());
+    KernelRegistry.register('neo-heatmap', new NeoHeatmapKernel());
+    KernelRegistry.register('neo-sdf', new NeoSDFKernel());
 }
