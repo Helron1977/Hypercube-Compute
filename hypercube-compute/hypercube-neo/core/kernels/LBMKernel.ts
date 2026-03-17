@@ -24,7 +24,7 @@ export class LBMD2Q9Kernel implements IKernel {
     ): void {
         const nx = Math.floor(gridConfig.dimensions.nx / gridConfig.chunks.x);
         const ny = Math.floor(gridConfig.dimensions.ny / gridConfig.chunks.y);
-        const padding = 1;
+        const padding = gridConfig.padding ?? 1;
         const pNx = nx + 2 * padding;
 
         const omega = (scheme.params?.omega as number) || 1.75;

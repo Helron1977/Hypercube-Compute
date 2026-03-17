@@ -18,7 +18,7 @@ describe('Hypercube Neo: LBM Aerodynamics Port', () => {
             { name: 'f6', type: 'scalar', isSynchronized: true },
             { name: 'f7', type: 'scalar', isSynchronized: true },
             { name: 'f8', type: 'scalar', isSynchronized: true },
-            { name: 'obstacles', type: 'mask', isReadOnly: true },
+            { name: 'obstacles', type: 'mask', isSynchronized: true, isReadOnly: true },
             { name: 'vx', type: 'scalar', isSynchronized: true },
             { name: 'vy', type: 'scalar', isSynchronized: true },
             { name: 'density', type: 'scalar', isSynchronized: true },
@@ -70,7 +70,7 @@ describe('Hypercube Neo: LBM Aerodynamics Port', () => {
             mode: 'cpu'
         };
 
-        const engine = await factory.instantiate(config, lbmDescriptor);
+        const engine = await factory.build(config, lbmDescriptor);
 
         console.log("--- STARTING LBM DIAGNOSTIC TEST ---");
 

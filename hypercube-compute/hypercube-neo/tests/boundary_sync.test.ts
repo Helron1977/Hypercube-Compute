@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { VirtualGrid } from '../core/VirtualGrid';
+import { VirtualGrid } from '../core/topology/VirtualGrid';
 import { MasterBuffer } from '../core/MasterBuffer';
-import { BoundarySynchronizer } from '../core/BoundarySynchronizer';
+import { BoundarySynchronizer } from '../core/topology/BoundarySynchronizer';
 import { EngineDescriptor, HypercubeConfig } from '../core/types';
 
 describe('Hypercube Neo: Boundary Synchronization', () => {

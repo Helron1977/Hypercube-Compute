@@ -16,19 +16,24 @@ async function main() {
     // 2. Build Engine
     const engine = await factory.build(config, descriptor);
 
+    // IA Observability (Web MCP)
+    const { DebugBridge } = await import('../../helpers/DebugBridge');
+    DebugBridge.setup(engine, config);
+
     const NX = config.dimensions.nx;
     const NY = config.dimensions.ny;
     const COLS = config.chunks.x;
     const ROWS = config.chunks.y;
 
     // 3. Setup Layout
+    const container = document.getElementById('canvas-container')!;
     const canvas = document.createElement('canvas');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     canvas.style.position = 'absolute';
     canvas.style.top = '0';
     canvas.style.left = '0';
-    document.body.appendChild(canvas);
+    container.appendChild(canvas);
 
     const hud = new BenchmarkHUD('OceanEngine 2.5D IsoVolume', `${NX} x ${NY}`);
 

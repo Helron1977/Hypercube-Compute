@@ -1,0 +1,39 @@
+{
+    "$schema": "https://hypercube-neo.dev/schema/v4.json",
+    "name": "Heat Diffusion Showcase GPU",
+    "version": "1.0.0",
+    "engine": {
+        "name": "Heat-GPU",
+        "version": "1.0.0",
+        "faces": [
+            { "name": "temperature", "type": "scalar", "isPingPong": true },
+            { "name": "obstacles", "type": "mask", "isReadOnly": true }
+        ],
+        "rules": [
+            {
+                "type": "neo-heat",
+                "source": "temperature",
+                "params": {
+                    "omega": 0.2
+                }
+            }
+        ],
+        "requirements": {
+            "ghostCells": 1,
+            "pingPong": true
+        }
+    },
+    "config": {
+        "mode": "gpu",
+        "dimensions": { "nx": 512, "ny": 256, "nz": 1 },
+        "chunks": { "x": 1, "y": 1 },
+        "boundaries": {
+            "all": { "role": "wall" }
+        },
+        "params": {
+            "diffusionRate": 0.2,
+            "pixelScale": 2.0
+        },
+        "engine": "Heat-GPU"
+    }
+}

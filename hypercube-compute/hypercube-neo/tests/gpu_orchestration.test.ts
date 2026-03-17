@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { VirtualGrid } from '../core/VirtualGrid';
+import { VirtualGrid } from '../core/topology/VirtualGrid';
 import { MasterBuffer } from '../core/MasterBuffer';
 import { ParityManager } from '../core/ParityManager';
 import { GpuDispatcher } from '../core/GpuDispatcher';
@@ -31,7 +31,8 @@ describe('Hypercube Neo: GPU Orchestration Logic', () => {
         createBuffer: () => ({ destroy: () => { } }),
         createBindGroup: () => ({}),
         createComputePipeline: () => ({ getBindGroupLayout: () => ({}) }),
-        queue: { writeBuffer: () => { }, submit: () => { } }
+        queue: { writeBuffer: () => { }, submit: () => { } },
+        limits: { minUniformBufferOffsetAlignment: 256 }
     };
 
     const descriptor: EngineDescriptor = {

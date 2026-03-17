@@ -7,10 +7,11 @@ export interface RenderOptions {
     minVal?: number;
     maxVal?: number;
     obstaclesFace?: number;
-    vorticityFace?: number;
+    vorticityFace?: number; // Deprecated, use auxiliaryFaces
     sliceZ?: number;
     criteria?: { faceIndex: number, weight: number, distanceThreshold?: number }[];
     criteriaSDF?: { xFace: number, yFace: number, weight: number, distanceThreshold: number }[];
+    auxiliaryFaces?: number[]; // [0]=vorticity, [1]=vx, [2]=vy, etc.
 }
 
 /**
@@ -43,9 +44,7 @@ export class CanvasAdapterNeo {
         const nChunksX = chunkLayout.x;
         const nChunksY = chunkLayout.y;
 
-        // Virtual Dimensions (excluding ghost cells)
-        const vnx = Math.floor(totalW / nChunksX);
-        const vny = Math.floor(totalH / nChunksY);
+        // Note: vnx/vny are no longer uniform. We calculate them per-chunk from localDimensions.
 
         // Colormap configuration
         const colormap = options.colormap || 'arctic';
@@ -53,43 +52,67 @@ export class CanvasAdapterNeo {
         const maxV = options.maxVal ?? 1;
         const invRange = 1.0 / (maxV - minV || 1.0);
 
-        const hasObs = options.obstaclesFace !== undefined;
-        const hasVort = options.vorticityFace !== undefined;
+
+        // Resolve logical face indices → physical slots via parityManager
+        // (same convention as WebGpuRendererNeo: faceIndex is a descriptor.faces index)
+        const descriptor = (neo.vGrid as any).dataContract.descriptor;
+        const getPhysicalSlot = (logicalIdx: number | undefined): number | undefined => {
+            if (logicalIdx === undefined || logicalIdx >= descriptor.faces.length) return undefined;
+            const faceName = descriptor.faces[logicalIdx].name;
+            return neo.parityManager.getFaceIndices(faceName).read;
+        };
+        const physFaceIdx = getPhysicalSlot(options.faceIndex);
+        const physObsIdx  = getPhysicalSlot(options.obstaclesFace);
+        const physVortIdx = getPhysicalSlot(options.vorticityFace); // Keep for compatibility
+        const auxIndices = (options.auxiliaryFaces || []).map(idx => getPhysicalSlot(idx));
+
+        // Pre-calculate max dimensions for correct stride logic
+        let maxNx = 0;
+        for (const c of neo.vGrid.chunks) {
+            maxNx = Math.max(maxNx, c.localDimensions.nx);
+        }
+        const padding = descriptor.requirements.ghostCells;
+        const nxPhys = maxNx + 2 * padding;
 
         // Iterate through chunks and "tile" them into the global imageData
-        for (let cy = 0; cy < nChunksY; cy++) {
-            for (let cx = 0; cx < nChunksX; cx++) {
-                const chunk = neo.vGrid.chunks.find((c: any) => c.x === cx && c.y === cy);
-                if (!chunk) continue;
+        for (const chunk of neo.vGrid.chunks) {
+            const views = neo.mBuffer.getChunkViews(chunk.id);
+            const faces = views.faces;
+            // ... (rest of getting data arrays)
+            const data = physFaceIdx !== undefined ? faces[physFaceIdx] : null;
+            const criteria = options.criteria || [];
+            const criteriaFaces = criteria.map(c => {
+                const phys = getPhysicalSlot(c.faceIndex);
+                return phys !== undefined ? faces[phys] : new Float32Array(0);
+            });
+            const criteriaSDF = options.criteriaSDF || [];
+            const criteriaSDFFaces = criteriaSDF.map(c => ({
+                x: getPhysicalSlot(c.xFace) !== undefined ? faces[getPhysicalSlot(c.xFace)!] : new Float32Array(0),
+                y: getPhysicalSlot(c.yFace) !== undefined ? faces[getPhysicalSlot(c.yFace)!] : new Float32Array(0)
+            }));
+            const obsData  = physObsIdx  !== undefined ? faces[physObsIdx]  : null;
+            const vortData = physVortIdx !== undefined ? faces[physVortIdx] : null;
 
-                const views = neo.mBuffer.getChunkViews(chunk.id);
-                const faces = views.faces;
-                const data = options.faceIndex !== undefined ? faces[options.faceIndex] : null;
-                const criteria = options.criteria || [];
-                const criteriaFaces = criteria.map(c => faces[c.faceIndex]);
-                const criteriaSDF = options.criteriaSDF || [];
-                const criteriaSDFFaces = criteriaSDF.map(c => ({
-                    x: faces[c.xFace],
-                    y: faces[c.yFace]
-                }));
-                const obsData = hasObs ? faces[options.obstaclesFace!] : null;
-                const vortData = hasVort ? faces[options.vorticityFace!] : null;
+            // Calculate world offsets by summing preceding chunks
+            let worldXOffset = 0;
+            let worldYOffset = 0;
+            for (const c of neo.vGrid.chunks) {
+                if (c.y === chunk.y && c.z === chunk.z && c.x < chunk.x) worldXOffset += c.localDimensions.nx;
+                if (c.x === chunk.x && c.z === chunk.z && c.y < chunk.y) worldYOffset += c.localDimensions.ny;
+            }
 
-                const nxPhys = vnx + 2;
-                const nyPhys = vny + 2;
+            const nx = chunk.localDimensions.nx;
+            const ny = chunk.localDimensions.ny;
 
-                const worldXOffset = cx * vnx;
-                const worldYOffset = cy * vny;
+            for (let ly = padding; ly < ny + padding; ly++) {
+                const worldY = worldYOffset + (ly - padding);
+                const dstRowOffset = worldY * totalW;
+                const srcRowOffset = ly * nxPhys;
 
-                for (let ly = 1; ly < nyPhys - 1; ly++) {
-                    const worldY = worldYOffset + (ly - 1);
-                    const dstRowOffset = worldY * totalW;
-                    const srcRowOffset = ly * nxPhys;
-
-                    for (let lx = 1; lx < nxPhys - 1; lx++) {
-                        const srcIdx = srcRowOffset + lx;
-                        const worldX = worldXOffset + (lx - 1);
-                        const dstIdx = dstRowOffset + worldX;
+                for (let lx = padding; lx < nx + padding; lx++) {
+                    const srcIdx = srcRowOffset + lx;
+                    const worldX = worldXOffset + (lx - padding);
+                    const dstIdx = dstRowOffset + worldX;
 
                         // 1. OBSTACLES (Static Priority)
                         if (obsData && obsData[srcIdx] > 0.9) {
@@ -115,8 +138,13 @@ export class CanvasAdapterNeo {
                             b = b * (1 - tS) + 80 * tS;
 
                             // Vorticity: Red Highlights
-                            if (vortData) {
-                                const vMag = Math.min(1.0, Math.abs(vortData[srcIdx]) * 120.0);
+                            let vortDataForArctic = vortData;
+                            if (!vortDataForArctic && auxIndices[0] !== undefined) {
+                                vortDataForArctic = faces[auxIndices[0]];
+                            }
+
+                            if (vortDataForArctic) {
+                                const vMag = Math.min(1.0, Math.abs(vortDataForArctic[srcIdx]) * 120.0);
                                 if (vMag > 0.05) {
                                     const tC = Math.min(1.0, (vMag - 0.05) * 1.5);
                                     r = r * (1 - tC) + 255 * tC;
@@ -146,27 +174,42 @@ export class CanvasAdapterNeo {
                                         score += (weight / sumW) * sLoc;
                                     }
                                     sTotal = score;
+                                    
+                                    // Descente en paliers (Decision Engine Steps) - Only for criteria-based heatmap
+                                    const steps = 6;
+                                    const quantizedS = Math.floor(sTotal * steps) / steps;
+
+                                    if (quantizedS < 0.1) {
+                                        r = 15; g = 23; b = 42;     // Very dark slate (Fail)
+                                    } else if (quantizedS < 0.3) {
+                                        r = 14; g = 110; b = 180;   // Dark Blue
+                                    } else if (quantizedS < 0.5) {
+                                        r = 6; g = 182; b = 212;    // Cyan
+                                    } else if (quantizedS < 0.7) {
+                                        r = 234; g = 179; b = 8;    // Yellow
+                                    } else if (quantizedS < 0.9) {
+                                        r = 132; g = 204; b = 22;   // Yellow-Green
+                                    } else {
+                                        r = 34; g = 197; b = 94;    // Pure Green (Optimal Zones)
+                                    }
                                 }
                             } else {
                                 sTotal = (maxV === 0) ? 1.0 : Math.max(0, Math.min(1.0, (val - minV) * invRange));
-                            }
-
-                            // Descente en paliers (Steps)
-                            const steps = 6;
-                            const quantizedS = Math.floor(sTotal * steps) / steps;
-
-                            if (quantizedS < 0.1) {
-                                r = 15; g = 23; b = 42;     // Very dark slate (Fail)
-                            } else if (quantizedS < 0.3) {
-                                r = 14; g = 110; b = 180;   // Dark Blue
-                            } else if (quantizedS < 0.5) {
-                                r = 6; g = 182; b = 212;    // Cyan
-                            } else if (quantizedS < 0.7) {
-                                r = 234; g = 179; b = 8;    // Yellow
-                            } else if (quantizedS < 0.9) {
-                                r = 132; g = 204; b = 22;   // Yellow-Green
-                            } else {
-                                r = 34; g = 197; b = 94;    // Pure Green (Optimal Zones)
+                                
+                                // Thermal Heatmap Transition (Black -> Red -> Orange -> Yellow)
+                                const s = sTotal;
+                                if (s < 0.5) {
+                                    r = Math.floor(s * 2.0 * 255);
+                                    g = 0;
+                                    b = Math.floor(s * 0.2 * 255);
+                                } else {
+                                    r = 255;
+                                    g = Math.floor((s - 0.5) * 2.0 * 255);
+                                    b = Math.floor(s * 0.2 * 255);
+                                }
+                                r = Math.max(0, Math.min(255, r));
+                                g = Math.max(0, Math.min(255, g));
+                                b = Math.max(0, Math.min(255, b));
                             }
                         } else if (colormap === 'spatial-decision') {
                             // Exact O(1) Analytical Distance Resolving (SDF via Jump Flooding)
@@ -238,7 +281,6 @@ export class CanvasAdapterNeo {
 
                         // Write pixel (ABGR format for Little Endian architecture)
                         pixelData[dstIdx] = (a << 24) | (b << 16) | (g << 8) | r;
-                    }
                 }
             }
         }

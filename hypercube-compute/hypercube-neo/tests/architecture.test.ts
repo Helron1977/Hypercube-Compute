@@ -14,7 +14,7 @@ describe('Hypercube Neo: Core Architecture', () => {
         ],
         parameters: {},
         rules: [
-            { type: 'advection', method: 'Semi-Lagrangian', source: 'density', field: 'v', params: { dt: 1.0, dissipation: 1.0 } }
+            { type: 'neo-heat', method: 'Custom', source: 'density', params: { omega: 1.7 } }
         ],
         outputs: [],
         requirements: { ghostCells: 1, pingPong: true }
@@ -42,7 +42,7 @@ describe('Hypercube Neo: Core Architecture', () => {
             mode: 'cpu'
         };
 
-        const engine = await factory.instantiate(config, testDescriptor);
+        const engine = await factory.build(config, testDescriptor);
 
         // Force one step to trigger rasterization and sync
         await engine.step(0);
@@ -89,7 +89,7 @@ describe('Hypercube Neo: Core Architecture', () => {
             mode: 'cpu'
         };
 
-        const engine = await factory.instantiate(config, testDescriptor);
+        const engine = await factory.build(config, testDescriptor);
         await engine.step(0);
 
         const dIdx = engine.parityManager.getFaceIndices('density').read;

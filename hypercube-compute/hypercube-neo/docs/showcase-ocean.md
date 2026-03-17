@@ -58,7 +58,7 @@ Dans le bloc `rules`, vous contrôlez le comportement mathématique des équatio
 ```json
         "rules": [
             {
-                "type": "lbm-ocean-v1",
+                "type": "neo-ocean-v1",
                 "method": "OceanPhysics",
                 "source": "f0",
                 "params": {

@@ -120,10 +120,14 @@
             "x": 3,
             "y": 2
         },
+        "params": {
+            "pixelScale": 2.0
+        },
         "boundaries": {
-            "all": {
-                "role": "wall"
-            }
+            "left": { "role": "inflow" },
+            "right": { "role": "outflow" },
+            "top": { "role": "wall" },
+            "bottom": { "role": "wall" }
         },
         "mode": "cpu",
         "executionMode": "parallel",

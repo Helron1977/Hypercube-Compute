@@ -111,7 +111,7 @@
                 "source": "f0",
                 "params": {
                     "omega": 1.75,
-                    "inflowUx": 0.05,
+                    "inflowUx": 0.12,
                     "inflowUy": 0.0
                 }
             }
@@ -131,10 +131,14 @@
             "x": 1,
             "y": 1
         },
+        "params": {
+            "pixelScale": 2.0
+        },
         "boundaries": {
-            "all": {
-                "role": "wall"
-            }
+            "left": { "role": "inflow" },
+            "right": { "role": "outflow" },
+            "top": { "role": "wall" },
+            "bottom": { "role": "wall" }
         },
         "mode": "gpu",
         "objects": [
@@ -159,7 +163,7 @@
                     "f6": 0.0163,
                     "f7": 0.0163,
                     "f8": 0.0416,
-                    "vx": 0.15,
+                    "vx": 0.12,
                     "vy": 0.0,
                     "smoke": 0.0
                 },

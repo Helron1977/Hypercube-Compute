@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { VirtualGrid } from '../core/VirtualGrid';
+import { VirtualGrid } from '../core/topology/VirtualGrid';
 import { MasterBuffer } from '../core/MasterBuffer';
 import { ObjectRasterizer } from '../core/ObjectRasterizer';
 import { EngineDescriptor, HypercubeConfig } from '../core/types';

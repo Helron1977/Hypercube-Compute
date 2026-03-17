@@ -1,20 +1,23 @@
 import { IDispatcher } from './IDispatcher';
-import { IVirtualGrid, IMasterBuffer } from './GridAbstractions';
+import { IVirtualGrid, IMasterBuffer } from './topology/GridAbstractions';
 import { ParityManager } from './ParityManager';
 import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
 import { DataContract } from './DataContract';
 import { MasterBuffer } from './MasterBuffer';
 import { GpuKernelRegistry } from './kernels/GpuKernelRegistry';
+import { TopologyResolver } from './topology/TopologyResolver';
 
 /**
  * Orchestrates the numerical dispatch on the GPU (WebGPU).
  * Maintains physical parity with CPU dispatchers but uses WGSL kernels.
+ * 
  */
 export class GpuDispatcher implements IDispatcher {
-    private device: GPUDevice;
-    private pipelines: Map<string, GPUComputePipeline> = new Map();
-    private uniformBuffer?: GPUBuffer;
-    private bindGroups: Map<string, GPUBindGroup> = new Map();
+    public device: GPUDevice;
+    public pipelines: Map<string, GPUComputePipeline> = new Map();
+    public uniformBuffer?: GPUBuffer;
+    public bindGroups: Map<string, GPUBindGroup> = new Map();
+    private topologyResolver: TopologyResolver = new TopologyResolver();
 
     constructor(
         private vGrid: IVirtualGrid,
@@ -26,9 +29,11 @@ export class GpuDispatcher implements IDispatcher {
         }
         this.device = HypercubeGPUContext.device;
 
-        // Create a uniform buffer for simulation parameters (aligned to 256 bytes)
+        // Create a uniform buffer for simulation parameters (aligned to device limits)
+        // Create a uniform buffer for simulation parameters (aligned to device limits)
+        const bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(384); // 32 slots base + 8*8 slots objects = 384 bytes
         this.uniformBuffer = this.device.createBuffer({
-            size: 512, // Increased from 256 to accommodate 8 objects (requires ~336 bytes)
+            size: bytesPerChunkAligned,
             usage: (GPUBufferUsage as any).UNIFORM | (GPUBufferUsage as any).COPY_DST,
             label: 'Neo GpuDispatcher Uniforms'
         });
@@ -44,12 +49,14 @@ export class GpuDispatcher implements IDispatcher {
         const mBuf = this.mBuffer as MasterBuffer;
         const gpuBuffer = mBuf.gpuBuffer;
 
+        console.log(`GpuDispatcher: Dispatching Tick ${this.parityManager.currentTick}, Rules: ${descriptor.rules?.length || 0}`);
+
         if (!gpuBuffer) {
             throw new Error("GpuDispatcher: MasterBuffer does not contain a valid GPUBuffer.");
         }
 
-        // 1. Prepare Aligned Uniforms for ALL chunks in this dispatch (Bumped to 512 for objects)
-        const bytesPerChunkAligned = 512;
+        // 1. Prepare Aligned Uniforms for ALL chunks in this dispatch
+        const bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(384);
         const totalUniformSize = this.vGrid.chunks.length * bytesPerChunkAligned;
 
         if (!this.uniformBuffer || this.uniformBuffer.size < totalUniformSize) {
@@ -75,18 +82,15 @@ export class GpuDispatcher implements IDispatcher {
                 const base = i * (bytesPerChunkAligned / 4);
                 const f32 = new Float32Array(u32Data.buffer);
 
-                // This offset calculation is for the MasterBuffer's data, not the uniform buffer.
-                // It's placed here to match the MasterBuffer's internal calculation for consistency,
-                // even if not directly used for uniform buffer population.
-                const gid = vChunk.y * this.vGrid.chunkLayout.x + vChunk.x;
-                const offset = gid * mBuf.strideFace * 23 * 4; // Changed 21 to 23 as per instruction
+                const nx_chunk = Math.floor(this.vGrid.dimensions.nx / this.vGrid.chunkLayout.x);
+                const ny_chunk = Math.floor(this.vGrid.dimensions.ny / this.vGrid.chunkLayout.y);
 
-                u32Data[base + 0] = this.vGrid.dimensions.nx;
-                u32Data[base + 1] = this.vGrid.dimensions.ny;
+                u32Data[base + 0] = nx_chunk;
+                u32Data[base + 1] = ny_chunk;
                 u32Data[base + 2] = this.vGrid.chunkLayout.x;
                 u32Data[base + 3] = this.vGrid.chunkLayout.y;
                 f32[base + 4] = (scheme.params?.omega as number) ?? (scheme.params?.tau_0 as number) ?? 1.75;
-                f32[base + 5] = (scheme.params?.inflowUx as number) ?? (scheme.params?.cflLimit as number) ?? 0.15;
+                f32[base + 5] = (scheme.params?.inflowUx as number) ?? (scheme.params?.cflLimit as number) ?? 0.12;
                 f32[base + 6] = t;
                 u32Data[base + 7] = this.parityManager.currentTick;
                 u32Data[base + 8] = vChunk.x;
@@ -94,16 +98,68 @@ export class GpuDispatcher implements IDispatcher {
                 u32Data[base + 10] = mBuf.strideFace;
                 u32Data[base + 11] = grid.config.objects?.length || 0;
 
-                // Extra generic floats packed in padding
-                f32[base + 12] = (scheme.params?.bioDiffusion as number) ?? 0.0;
-                f32[base + 13] = (scheme.params?.bioGrowth as number) ?? 0.0;
-                f32[base + 14] = 0.0;
-                f32[base + 15] = 0.0;
+                // Absolute Physical Offsets via ParityManager (Agnostic layout)
+                const getAbsoluteIdx = (name: string) => {
+                    const mappings = (this.vGrid as any).dataContract.getFaceMappings();
+                    const faceIdx = mappings.findIndex((m: any) => m.name === name);
+                    if (faceIdx === -1) return 0;
+                    let baseIdx = 0;
+                    for (let k = 0; k < faceIdx; k++) {
+                        baseIdx += mappings[k].isPingPong ? 2 : 1;
+                    }
+                    return baseIdx;
+                };
 
-                // Pack up to 8 objects (starting at base + 16, each taking 8 words/32 bytes)
+                const tryGetIdx = (name: string, target: 'read' | 'write') => {
+                    try {
+                        const res = this.parityManager.getFaceIndices(name);
+                        return target === 'read' ? res.read : res.write;
+                    } catch (e) {
+                        return 0; // Return 0 or a default invalid index if not found
+                    }
+                };
+
+                u32Data[base + 12] = tryGetIdx('obstacles', 'read');
+                u32Data[base + 13] = tryGetIdx('vx', 'read') !== 0 ? tryGetIdx('vx', 'read') : tryGetIdx('temperature', 'read');
+                u32Data[base + 14] = tryGetIdx('vy', 'read');
+                u32Data[base + 15] = tryGetIdx('vorticity', 'read') !== 0 ? tryGetIdx('vorticity', 'read') : tryGetIdx('rho', 'read');
+                u32Data[base + 16] = tryGetIdx('smoke', 'read') !== 0 ? tryGetIdx('smoke', 'read') : tryGetIdx('biology', 'read');
+
+                u32Data[base + 17] = tryGetIdx('vx', 'write') !== 0 ? tryGetIdx('vx', 'write') : tryGetIdx('temperature', 'write');
+                u32Data[base + 18] = tryGetIdx('vy', 'write');
+                u32Data[base + 19] = tryGetIdx('vorticity', 'write') !== 0 ? tryGetIdx('vorticity', 'write') : tryGetIdx('rho', 'write');
+                u32Data[base + 20] = tryGetIdx('smoke', 'write') !== 0 ? tryGetIdx('smoke', 'write') : tryGetIdx('biology', 'write');
+
+                // LBM populations base
+                u32Data[base + 21] = getAbsoluteIdx('f0');
+
+                // NeoSDF specific jfaStep OR Ocean bio parameters
+                if (scheme.type === 'neo-sdf') {
+                    u32Data[base + 22] = Math.floor(t);
+                    // Pass specific face offsets for this SDF category
+                    u32Data[base + 23] = getAbsoluteIdx(scheme.source + '_x');
+                    u32Data[base + 30] = getAbsoluteIdx(scheme.source + '_y');
+                } else if (scheme.type === 'neo-ocean-v1') {
+                    f32[base + 22] = (scheme.params?.bioDiffusion as number) ?? 0.001;
+                    f32[base + 23] = (scheme.params?.bioGrowth as number) ?? 0.01;
+                }
+
+                // --- Topology Integration ---
+                const topo = this.topologyResolver.resolve(vChunk, this.vGrid.chunkLayout, grid.config.boundaries);
+                u32Data[base + 24] = topo.leftRole;
+                u32Data[base + 25] = topo.rightRole;
+                u32Data[base + 26] = topo.topRole;
+                u32Data[base + 27] = topo.bottomRole;
+                u32Data[base + 28] = topo.frontRole;
+                u32Data[base + 29] = topo.backRole;
+
+                // Pack up to 8 objects
                 const objects = grid.config.objects || [];
+                const metadata = GpuKernelRegistry.getMetadata(scheme.type);
+                const objOffset = metadata.uniformObjectOffset ?? 32;
+
                 for (let j = 0; j < Math.min(objects.length, 8); j++) {
-                    const objBase = base + 16 + j * 8;
+                    const objBase = base + objOffset + j * 8;
                     const obj = objects[j];
 
                     f32[objBase + 0] = obj.position.x;
@@ -111,8 +167,8 @@ export class GpuDispatcher implements IDispatcher {
                     f32[objBase + 2] = obj.dimensions.w;
                     f32[objBase + 3] = obj.dimensions.h;
                     f32[objBase + 4] = obj.properties.isObstacle ?? obj.properties.obstacles ?? 0;
-                    f32[objBase + 5] = obj.properties.isSmoke ?? obj.properties.smoke ?? obj.properties.biology ?? 0;
-                    u32Data[objBase + 6] = (obj.type === 'circle' ? 1 : (obj.type === 'rect' ? 2 : 0));
+                    f32[objBase + 5] = obj.properties.isSmoke ?? obj.properties.smoke ?? obj.properties.biology ?? obj.properties.temperature ?? obj.properties.isTempInjection ?? 0;
+                    u32Data[objBase + 6] = (obj.type === 'circle' ? 1 : (obj.type === 'rect' ? 2 : (obj.type === 'polygon' ? 3 : 0)));
                     f32[objBase + 7] = obj.properties.rho ?? 0;
                 }
             }
@@ -122,7 +178,6 @@ export class GpuDispatcher implements IDispatcher {
                 const vChunk = this.vGrid.chunks[i];
                 const uniformOffset = i * bytesPerChunkAligned;
 
-                // Calculate actual physical offset for this chunk in the MasterBuffer
                 const gid = vChunk.y * this.vGrid.chunkLayout.x + vChunk.x;
                 const chunkBufferOffset = gid * mBuf.totalSlotsPerChunk * mBuf.strideFace * 4;
                 const chunkBufferSize = mBuf.totalSlotsPerChunk * mBuf.strideFace * 4;
@@ -141,10 +196,10 @@ export class GpuDispatcher implements IDispatcher {
                 passEncoder.setPipeline(pipeline);
                 passEncoder.setBindGroup(0, bindGroup);
 
-                const nx = this.vGrid.dimensions.nx;
-                const ny = this.vGrid.dimensions.ny;
+                const nx_chunk = Math.floor(this.vGrid.dimensions.nx / this.vGrid.chunkLayout.x);
+                const ny_chunk = Math.floor(this.vGrid.dimensions.ny / this.vGrid.chunkLayout.y);
 
-                passEncoder.dispatchWorkgroups(Math.ceil(nx / 16), Math.ceil(ny / 16));
+                passEncoder.dispatchWorkgroups(Math.ceil(nx_chunk / 16), Math.ceil(ny_chunk / 16));
                 passEncoder.end();
             }
         }
@@ -176,7 +231,7 @@ export class GpuDispatcher implements IDispatcher {
             layout: pipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: dataBuffer, offset: dataOffset, size: dataSize } },
-                { binding: 1, resource: { buffer: uniformBuffer, offset: uniformOffset, size: 512 } }
+                { binding: 1, resource: { buffer: uniformBuffer, offset: uniformOffset, size: HypercubeGPUContext.alignToUniform(384) } }
             ],
             label: `BindGroup_${key}`
         });
@@ -188,6 +243,7 @@ export class GpuDispatcher implements IDispatcher {
     private async getPipeline(type: string): Promise<GPUComputePipeline> {
         if (this.pipelines.has(type)) return this.pipelines.get(type)!;
 
+        console.info(`GpuDispatcher: Creating compute pipeline for "${type}"...`);
         const wgslSource = GpuKernelRegistry.getSource(type);
         const pipeline = HypercubeGPUContext.createComputePipeline(wgslSource, `Neo_${type}`);
         this.pipelines.set(type, pipeline);

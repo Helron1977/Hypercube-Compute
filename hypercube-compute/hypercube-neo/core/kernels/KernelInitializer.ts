@@ -9,6 +9,9 @@ import { NeoAeroKernel } from './NeoAeroKernel';
 import { NeoOceanKernel } from './NeoOceanKernel';
 import { NeoHeatmapKernel } from './NeoHeatmapKernel';
 import { NeoSDFKernel } from './NeoSDFKernel';
+import { NeoLifeKernel } from './NeoLifeKernel';
+import { NeoPathKernel } from './NeoPathKernel';
+import { NeoTensorKernel } from './NeoTensorKernel';
 
 /**
  * Initializes the default set of CPU kernels for the Hypercube Neo engine.
@@ -22,7 +25,13 @@ export function initializeKernels(): void {
     KernelRegistry.register('lbm-macro', new LBMMacroKernel());
     KernelRegistry.register('lbm-smoke', new LBMSmokeKernel());
     KernelRegistry.register('lbm-aero-fidelity-v1', new NeoAeroKernel());
-    KernelRegistry.register('lbm-ocean-v1', new NeoOceanKernel());
+    KernelRegistry.register('neo-ocean-v1', new NeoOceanKernel());
     KernelRegistry.register('neo-heatmap', new NeoHeatmapKernel());
+    KernelRegistry.register('neo-heat', new NeoHeatmapKernel());
+    KernelRegistry.register('neo-heat-v1', new NeoHeatmapKernel());
+    KernelRegistry.register('heat-v1', new NeoHeatmapKernel());
     KernelRegistry.register('neo-sdf', new NeoSDFKernel());
+    KernelRegistry.register('neo-life-v1', new NeoLifeKernel());
+    KernelRegistry.register('neo-path-v1', new NeoPathKernel());
+    KernelRegistry.register('neo-tensor-cp-v1', new NeoTensorKernel());
 }

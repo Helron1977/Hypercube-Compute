@@ -1,95 +1,87 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neo Ocean (CPU)</title>
+    <title>Hypercube Neo - Ocean CPU</title>
+    <link rel="stylesheet" href="../assets/showcase.css">
     <style>
-        :root {
-            --primary: #0088ff;
-            --bg: #020408;
-            --hud-bg: rgba(2, 4, 8, 0.7);
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050f23;
+            color: #fff;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
 
-        body,
-        html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: var(--bg);
-            color: white;
-            font-family: 'Outfit', -apple-system, sans-serif;
-            overflow: hidden;
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1a0a16 0%, #050f23 100%);
         }
 
         canvas {
-            image-rendering: pixelated;
+            max-width: 98vw;
+            max-height: 98vh;
+            border-radius: 4px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), 0 0 2px rgba(255, 255, 255, 0.1);
         }
 
-        #hud {
+        /* Premium Hub Button */
+        .hub-button {
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            z-index: 9999 !important;
+            background: rgba(0, 0, 0, 0.6) !important;
+            backdrop-filter: blur(10px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            padding: 8px 16px !important;
+            border-radius: 8px !important;
+            color: #fff !important;
+            text-decoration: none !important;
+            font-family: 'Inter', sans-serif !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1px !important;
+            font-size: 0.75rem !important;
+            transition: all 0.3s ease !important;
+        }
+        .hub-button:hover {
+            background: rgba(0, 242, 255, 0.2) !important;
+            border-color: #00f2ff !important;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.3) !important;
+        }
+
+        #instructions {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            background: var(--hud-bg);
-            backdrop-filter: blur(20px);
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 10;
-        }
-
-        .hud-item {
-            margin-bottom: 12px;
-        }
-
-        .hud-label {
-            font-size: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: rgba(255, 255, 255, 0.4);
-            margin-bottom: 4px;
-        }
-
-        .hud-value {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--primary);
-        }
-
-        .back-link {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            text-decoration: none;
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            padding: 8px 16px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 100px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            transition: all 0.3s;
-        }
-
-        .back-link:hover {
-            color: white;
-            background: rgba(255, 255, 255, 0.1);
-            border-color: var(--primary);
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #a0aec0;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            backdrop-filter: blur(5px);
         }
     </style>
 </head>
 
 <body>
-    <!-- BenchmarkHUD is injected by script -->
+    <div id="canvas-container"></div>
+    
+    <a href="../index.html" class="hub-button">Back to Hub</a>
 
-    <a href="../index.html" class="back-link">← HUB</a>
-
-    <!-- Canvas is injected by script -->
+    <div id="instructions">
+        <span>🌊 Click & drag to generate ocean waves & bio-luminescence (CPU)</span>
+    </div>
 
     <script type="module" src="./ocean.ts"></script>
 </body>
-
 </html>

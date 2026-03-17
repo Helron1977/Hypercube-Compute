@@ -1,0 +1,134 @@
+{
+    "$schema": "https://hypercube-neo.dev/schema/v4.json",
+    "name": "SDF O(1) Spatial Engine (GPU)",
+    "version": "1.0.0",
+    "engine": {
+        "name": "SDF-O1-GPU",
+        "version": "1.0.0",
+        "requirements": {
+            "ghostCells": 0,
+            "pingPong": true
+        },
+        "faces": [
+            {
+                "name": "obstacles",
+                "type": "scalar",
+                "isSynchronized": false,
+                "isReadOnly": true
+            },
+            {
+                "name": "sdf_metro_x",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_metro_y",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_school_x",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_school_y",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_park_x",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_park_y",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_hospital_x",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_hospital_y",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_shop_x",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_shop_y",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_water_x",
+                "type": "scalar",
+                "isSynchronized": true
+            },
+            {
+                "name": "sdf_water_y",
+                "type": "scalar",
+                "isSynchronized": true
+            }
+        ],
+        "parameters": {},
+        "rules": [
+            {
+                "type": "neo-sdf",
+                "source": "sdf_metro"
+            },
+            {
+                "type": "neo-sdf",
+                "source": "sdf_school"
+            },
+            {
+                "type": "neo-sdf",
+                "source": "sdf_park"
+            },
+            {
+                "type": "neo-sdf",
+                "source": "sdf_hospital"
+            },
+            {
+                "type": "neo-sdf",
+                "source": "sdf_shop"
+            },
+            {
+                "type": "neo-sdf",
+                "source": "sdf_water"
+            }
+        ],
+        "outputs": []
+    },
+    "config": {
+        "mode": "gpu",
+        "executionMode": "parallel",
+        "dimensions": {
+            "nx": 512,
+            "ny": 512,
+            "nz": 1
+        },
+        "chunks": {
+            "x": 1,
+            "y": 1
+        },
+        "boundaries": {
+            "all": {
+                "role": "wall"
+            }
+        },
+        "engine": "SDF-O1-GPU",
+        "params": {
+            "pixelScale": 2.0
+        }
+    },
+    "visualProfile": {
+        "defaultMode": "2d"
+    }
+}

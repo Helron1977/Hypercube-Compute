@@ -1,4 +1,4 @@
-import { IRasterizer, IMasterBuffer, IVirtualGrid, VirtualChunk } from './GridAbstractions';
+import { IRasterizer, IMasterBuffer, IVirtualGrid, VirtualChunk } from './topology/GridAbstractions';
 import { VirtualObject, EngineFace, EngineDescriptor } from './types';
 import { DataContract } from './DataContract';
 import { ParityManager } from './ParityManager';
@@ -10,7 +10,7 @@ import { ParityManager } from './ParityManager';
 export class ObjectRasterizer implements IRasterizer {
     constructor(private parityManager?: ParityManager) { }
 
-    rasterizeChunk(vChunk: VirtualChunk, vGrid: IVirtualGrid, mBuffer: IMasterBuffer, t: number): void {
+    rasterizeChunk(vChunk: VirtualChunk, vGrid: IVirtualGrid, mBuffer: IMasterBuffer, t: number, target: 'read' | 'write' = 'write'): void {
         const grid = vGrid as any;
         const config = grid.config;
         const dataContract = grid.dataContract as DataContract;
@@ -22,14 +22,29 @@ export class ObjectRasterizer implements IRasterizer {
 
         const views = mBuffer.getChunkViews(vChunk.id);
 
-        const nx = Math.floor(config.dimensions.nx / config.chunks.x);
-        const ny = Math.floor(config.dimensions.ny / config.chunks.y);
-        const padding = 1;
-        const pNx = nx + 2 * padding;
-        const pNy = ny + 2 * padding;
+        const nx = vChunk.localDimensions.nx;
+        const ny = vChunk.localDimensions.ny;
+        const padding = descriptor.requirements.ghostCells;
 
-        const chunkX0 = vChunk.x * nx;
-        const chunkY0 = vChunk.y * ny;
+        // Calculate maximum dimensions and chunk world offsets
+        let maxNx = 0;
+        let chunkX0 = 0;
+        let chunkY0 = 0;
+        
+        for (const c of grid.chunks) {
+            maxNx = Math.max(maxNx, c.localDimensions.nx);
+            // World X offset is the sum of all preceding chunks' widths along the X axis (y and z being the same)
+            if (c.y === vChunk.y && c.z === vChunk.z && c.x < vChunk.x) {
+                chunkX0 += c.localDimensions.nx;
+            }
+            // World Y offset is the sum of all preceding chunks' heights along the Y axis (x and z being the same)
+            if (c.x === vChunk.x && c.z === vChunk.z && c.y < vChunk.y) {
+                chunkY0 += c.localDimensions.ny;
+            }
+        }
+        
+        const pNx = maxNx + 2 * padding;
+        const pNy = Math.ceil(config.dimensions.ny / config.chunks.y) + 2 * padding; // Roughly, for bounds
 
         for (const obj of chunkObjects) {
             if (obj.renderOnly) continue;
@@ -49,11 +64,8 @@ export class ObjectRasterizer implements IRasterizer {
                 const faceIdx = descriptor.faces.findIndex(f => f.name === propName);
                 if (faceIdx === -1) continue;
 
-                // We write to the current 'write' buffer so that the objects are 
-                // injected into the newly evolved state of the current step.
                 let bufferIdx: number;
                 if (this.parityManager) {
-                    const target = (arguments[4] as any) || 'write';
                     const indices = this.parityManager.getFaceIndices(propName);
                     bufferIdx = target === 'read' ? indices.read : indices.write;
                 } else {

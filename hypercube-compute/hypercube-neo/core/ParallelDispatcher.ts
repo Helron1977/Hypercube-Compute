@@ -1,5 +1,5 @@
 import { IDispatcher } from './IDispatcher';
-import { IVirtualGrid, IMasterBuffer } from './GridAbstractions';
+import { IVirtualGrid, IMasterBuffer } from './topology/GridAbstractions';
 import { ParityManager } from './ParityManager';
 import { DataContract } from './DataContract';
 

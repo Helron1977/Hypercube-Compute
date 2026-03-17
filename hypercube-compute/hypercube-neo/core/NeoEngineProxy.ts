@@ -1,6 +1,6 @@
-import { IVirtualGrid, IMasterBuffer, IBoundarySynchronizer, IRasterizer } from './GridAbstractions';
+import { IVirtualGrid, IMasterBuffer, IBoundarySynchronizer, IRasterizer } from './topology/GridAbstractions';
 import { ObjectRasterizer } from './ObjectRasterizer';
-import { BoundarySynchronizer } from './BoundarySynchronizer';
+import { BoundarySynchronizer } from './topology/BoundarySynchronizer';
 import { ParityManager } from './ParityManager';
 import { IDispatcher } from './IDispatcher';
 
@@ -13,15 +13,18 @@ export class NeoEngineProxy {
         public readonly vGrid: IVirtualGrid,
         public readonly mBuffer: IMasterBuffer,
         public readonly parityManager: ParityManager,
-        private rasterizer: IRasterizer,
-        private synchronizer: IBoundarySynchronizer,
-        private dispatcher: IDispatcher
+        public readonly rasterizer: IRasterizer,
+        public readonly synchronizer: IBoundarySynchronizer,
+        public readonly dispatcher: IDispatcher
     ) { }
 
     /**
      * Initializes the engine state (useful for GPU sync).
      */
     public async init(): Promise<void> {
+        // Essential: Initialize LBM fluid to equilibrium to avoid NaN from zero-ghost-cells
+        this.mBuffer.initializeEquilibrium();
+
         // Run initial rasterization for all chunks (Target 'read' buffer for initialization)
         for (const chunk of this.vGrid.chunks) {
             this.rasterizer.rasterizeChunk(chunk, this.vGrid, this.mBuffer, 0, 'read');
@@ -36,6 +39,19 @@ export class NeoEngineProxy {
     }
 
     /**
+     * Resolves a face name to its logical index in the engine descriptor's faces array.
+     * Use this to pass a stable faceIndex to WebGpuRendererNeo.render(), which will
+     * resolve it to the correct physical slot via parityManager internally.
+     * @throws If the face name is not found.
+     */
+    public getFaceLogicalIndex(faceName: string): number {
+        const descriptor = (this.vGrid as any).dataContract.descriptor;
+        const idx = descriptor.faces.findIndex((f: any) => f.name === faceName);
+        if (idx === -1) throw new Error(`NeoEngineProxy: Face "${faceName}" not found in descriptor.`);
+        return idx;
+    }
+
+    /**
      * Executes a single simulation step at time 't'.
      */
     public async step(t: number): Promise<void> {
@@ -46,6 +62,7 @@ export class NeoEngineProxy {
         await this.dispatcher.dispatch(t);
 
         // In GPU mode, injection and boundaries are handled natively in the mono-kernel
+        // OR via synchronizer if we explicitly want to cross-sync chunks.
         if (!isGpu) {
             // 2. Rasterize VirtualObjects into the grid (Injection: Write)
             for (const chunk of this.vGrid.chunks) {
@@ -54,11 +71,19 @@ export class NeoEngineProxy {
 
             // 3. Synchronize boundaries
             this.synchronizer.syncAll(this.vGrid, this.mBuffer, this.parityManager, 'write');
-        }
 
-        // 4. Sync CPU -> GPU (Essential for rasterization/sync to be visible on GPU)
-        if (this.mBuffer.gpuBuffer && !isGpu) {
-            this.mBuffer.syncToDevice();
+            // 4. Sync CPU -> GPU (Essential for rasterization/sync to be visible on GPU)
+            if (this.mBuffer.gpuBuffer) {
+                this.mBuffer.syncToDevice();
+            }
+        } else {
+            // GPU Initial Sync (Essential for seed injection from CPU)
+            if (this.parityManager.currentTick === 0 && this.mBuffer.gpuBuffer) {
+                await this.mBuffer.syncToDevice();
+            }
+
+            // In GPU mode, we still NEED boundary sync for multi-chunk grids
+            this.synchronizer.syncAll(this.vGrid, this.mBuffer, this.parityManager, 'write');
         }
 
         // 5. Increment the simulation parity

@@ -9,7 +9,7 @@ export interface Dimension3D {
     nz: number; // 1 for 2D, multiple of 16 for 3D
 }
 
-export type BoundaryRole = 'joint' | 'wall' | 'periodic' | 'absorbing' | 'clamped' | 'dirichlet' | 'neumann' | 'symmetry';
+export type BoundaryRole = 'joint' | 'wall' | 'periodic' | 'absorbing' | 'clamped' | 'dirichlet' | 'neumann' | 'symmetry' | 'inflow' | 'outflow';
 
 export interface BoundarySide {
     role: BoundaryRole;
@@ -40,7 +40,7 @@ export interface EngineFace {
 }
 
 export interface NumericalScheme {
-    type: 'lbm-d2q9' | 'lbm-macro' | 'lbm-smoke' | 'lbm-aero-fidelity-v1' | 'advection' | 'diffusion' | 'reaction' | 'stencil' | 'custom' | 'force' | 'neo-heatmap' | 'neo-sdf';
+    type: 'lbm-d2q9' | 'lbm-macro' | 'lbm-smoke' | 'lbm-aero-fidelity-v1' | 'neo-ocean-v1' | 'advection' | 'diffusion' | 'reaction' | 'stencil' | 'custom' | 'force' | 'neo-heatmap' | 'neo-heat' | 'neo-sdf';
     method?: 'Upwind' | 'Semi-Lagrangian' | 'Explicit-Euler' | 'Custom' | 'Force' | 'Direct';
     source: string; // Face name
     destination?: string;
@@ -192,6 +192,7 @@ export interface HypercubeConfig {
     params: Record<string, any>;
     objects?: VirtualObject[]; // Spatially distributed objects
     mode: 'cpu' | 'gpu';
+    padding?: number; // Optional override for kernel ghost cells
     executionMode?: 'mono' | 'parallel';
     workers?: number;
 }

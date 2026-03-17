@@ -36,6 +36,22 @@ export class HypercubeGPUContext {
         return true;
     }
 
+    /**
+     * Returns the minimum alignment for uniform buffer offsets.
+     */
+    public static get uniformAlignment(): number {
+        if (!this._device) return 256; // Mock for tests/environments without GPU
+        return this._device.limits.minUniformBufferOffsetAlignment || 256;
+    }
+
+    /**
+     * Aligns a size to the next multiple of the uniform alignment.
+     */
+    public static alignToUniform(size: number): number {
+        const alignment = this.uniformAlignment;
+        return Math.ceil(size / alignment) * alignment;
+    }
+
     static createComputePipeline(wgslSource: string, label = 'Compute Pipeline'): GPUComputePipeline {
         const shaderModule = this.device.createShaderModule({
             code: wgslSource,

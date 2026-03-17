@@ -1,19 +1,19 @@
 import { IFactory } from './IFactory';
-import { IBoundarySynchronizer } from './GridAbstractions';
+import { IBoundarySynchronizer } from './topology/GridAbstractions';
 import { HypercubeConfig, EngineDescriptor, HypercubeManifest } from './types';
-import { VirtualGrid } from './VirtualGrid';
+import { VirtualGrid } from './topology/VirtualGrid';
 import { MasterBuffer } from './MasterBuffer';
 import { NeoEngineProxy } from './NeoEngineProxy';
 import { IDispatcher } from './IDispatcher';
 import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
 import { ObjectRasterizer } from './ObjectRasterizer';
-import { BoundarySynchronizer } from './BoundarySynchronizer';
+import { BoundarySynchronizer } from './topology/BoundarySynchronizer';
 import { ParityManager } from './ParityManager';
 import { KernelRegistry } from './kernels/KernelRegistry';
 import { initializeKernels } from './kernels/KernelInitializer';
 import { initializeGpuKernels } from './kernels/GpuKernelInitializer';
 import { GpuDispatcher } from './GpuDispatcher';
-import { GpuBoundarySynchronizer } from './GpuBoundarySynchronizer';
+import { GpuBoundarySynchronizer } from './topology/GpuBoundarySynchronizer';
 
 // Auto-register default kernels
 initializeKernels();
@@ -51,6 +51,9 @@ export class HypercubeNeoFactory implements IFactory {
      * Respects the 'mode' (cpu/gpu) defined in the configuration.
      */
     public async build(config: HypercubeConfig, descriptor: EngineDescriptor): Promise<NeoEngineProxy> {
+        // 0. Manifest Integrity Check
+        this.validateManifest(config, descriptor);
+
         console.log(`Factory: Building engine in ${config.mode.toUpperCase()} mode...`);
 
         // 1. Domain Decomposition (Virtual Layout)
@@ -93,5 +96,38 @@ export class HypercubeNeoFactory implements IFactory {
 
         await engine.init();
         return engine;
+    }
+
+    /**
+     * Rigorous validation of the engine configuration.
+     */
+    private validateManifest(config: HypercubeConfig, descriptor: EngineDescriptor) {
+        if (!config.dimensions || config.dimensions.nx <= 0 || config.dimensions.ny <= 0) {
+            throw new Error("Validation Error: Dimensions nx and ny must be positive integers.");
+        }
+
+        if (config.mode === 'gpu') {
+            const isPow2 = (n: number) => (n & (n - 1)) === 0;
+            if (!isPow2(config.dimensions.nx) || !isPow2(config.dimensions.ny)) {
+                console.warn("GPU Performance Warning: Dimensions are not powers of 2. This may cause Bank Conflicts.");
+            }
+        }
+
+        if (!descriptor.faces || descriptor.faces.length === 0) {
+            throw new Error("Validation Error: Engine must define at least one data face.");
+        }
+
+        // Kernel-specific rules validation
+        for (const rule of descriptor.rules) {
+            if (rule.type === 'lbm-d2q9' || rule.type === 'neo-ocean-v1') {
+                // Check if it has a source face and if it's marked as synchronized
+                const populations = descriptor.faces.find(f => f.name === rule.source);
+                if (!populations) {
+                    throw new Error(`Validation Error: Kernel '${rule.type}' requires source face '${rule.source}' which is missing.`);
+                }
+            }
+        }
+
+        console.log("Factory: Manifest validated successfully.");
     }
 }

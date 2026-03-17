@@ -1,6 +1,7 @@
 import { HypercubeNeoFactory } from '../../core/HypercubeNeoFactory';
 import { NacaHelper } from '../../helpers/ShapeHelpers';
 import { HypercubeNeo } from '../../HypercubeNeo';
+import { BenchmarkHUD } from '../../../examples/shared/BenchmarkHUD';
 
 /**
  * Neo Aero (CPU) Orchestrator
@@ -25,6 +26,10 @@ async function main() {
     // 3. Build Engine
     const engine = await factory.build(config, descriptor);
 
+    // IA Observability (Web MCP)
+    const { DebugBridge } = await import('../../helpers/DebugBridge');
+    DebugBridge.setup(engine, config);
+
     const NX = config.dimensions.nx;
     const NY = config.dimensions.ny;
 
@@ -35,16 +40,23 @@ async function main() {
     canvas.height = NY;
     container.appendChild(canvas);
 
-    const fpsElem = document.getElementById('fps-counter');
+    const hud = new BenchmarkHUD('Neo Aero (CPU)', `${NX} x ${NY}`);
+
+    // Resolve stable LOGICAL face indices — CanvasAdapterNeo/WebGpuRendererNeo resolve to physical slots internally
+    const smokeFaceIdx = engine.getFaceLogicalIndex('smoke');
+    const obsFaceIdx   = engine.getFaceLogicalIndex('obstacles');
+    const vortFaceIdx  = engine.getFaceLogicalIndex('vorticity');
+    const vxFaceIdx    = engine.getFaceLogicalIndex('vx');
+    const vyFaceIdx    = engine.getFaceLogicalIndex('vy');
 
     let isInitialized = false;
-    let frameCount = 0;
-    let lastTime = performance.now();
 
     async function loop() {
         try {
+            const start = performance.now();
             // physics step
             await engine.step(1);
+            const ms = performance.now() - start;
 
             // One-time initialization logic to remove the static grid_init object
             if (!isInitialized) {
@@ -54,29 +66,19 @@ async function main() {
                 }
             }
 
-            // Sync indices for rendering
-            const smokeIdx = engine.parityManager.getFaceIndices('smoke').read;
-            const obsIdx = engine.parityManager.getFaceIndices('obstacles').read;
-            const vortIdx = engine.parityManager.getFaceIndices('vorticity').read;
-
-            // Render via Neo adapter
+            // Render via Neo adapter using stable logical face indices
             HypercubeNeo.autoRender(engine, canvas, {
-                faceIndex: smokeIdx,
+                faceIndex: smokeFaceIdx,
                 colormap: 'arctic',
                 minVal: 0.0,
                 maxVal: 1.0,
-                obstaclesFace: obsIdx,
-                vorticityFace: vortIdx
+                obstaclesFace: obsFaceIdx,
+                auxiliaryFaces: [vortFaceIdx, vxFaceIdx, vyFaceIdx]
             });
 
-            // Update FPS
-            frameCount++;
-            const now = performance.now();
-            if (now - lastTime >= 1000) {
-                if (fpsElem) fpsElem.innerText = `${frameCount} FPS`;
-                frameCount = 0;
-                lastTime = now;
-            }
+
+            hud.updateCompute(ms);
+            hud.tickFrame();
 
             requestAnimationFrame(loop);
         } catch (e) {

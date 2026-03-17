@@ -99,7 +99,7 @@
         ],
         "rules": [
             {
-                "type": "lbm-ocean-v1",
+                "type": "neo-ocean-v1",
                 "method": "OceanPhysics",
                 "source": "f0",
                 "params": {
@@ -127,10 +127,16 @@
             "x": 2,
             "y": 2
         },
+        "params": {
+            "pixelScale": 2.0
+        },
         "boundaries": {
             "all": {
                 "role": "wall"
             }
+        },
+        "params": {
+            "pixelScale": 2.0
         },
         "mode": "cpu",
         "executionMode": "parallel",

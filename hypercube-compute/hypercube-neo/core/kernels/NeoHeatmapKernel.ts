@@ -3,6 +3,9 @@ import { NumericalScheme, HypercubeConfig } from '../types';
 import { VirtualChunk } from '../GridAbstractions';
 
 export class NeoHeatmapKernel implements IKernel {
+    public static readonly DEFAULT_DIFFUSION = 0.25;
+    public static readonly DEFAULT_DECAY = 0.99;
+
     execute(
         views: Float32Array[],
         scheme: NumericalScheme,
@@ -10,54 +13,57 @@ export class NeoHeatmapKernel implements IKernel {
         gridConfig: HypercubeConfig,
         chunk: VirtualChunk
     ): void {
-        const nx = Math.floor(gridConfig.dimensions.nx / gridConfig.chunks.x);
-        const ny = Math.floor(gridConfig.dimensions.ny / gridConfig.chunks.y);
-        const padding = 1;
-        const pNx = nx + 2 * padding;
-        const pNy = ny + 2 * padding;
+        const nx = chunk.localDimensions.nx;
+        const ny = chunk.localDimensions.ny;
+        const padding = gridConfig.padding ?? 1;
 
-        const dt = scheme.params?.diffusion_rate ?? 0.25;
-        const decay = scheme.params?.decay_factor ?? 0.99;
+        let maxNx = 0;
+        let maxNy = 0;
+        if ((gridConfig as any).maxDimensions) {
+            maxNx = (gridConfig as any).maxDimensions.nx;
+            maxNy = (gridConfig as any).maxDimensions.ny;
+        } else {
+            maxNx = Math.ceil(gridConfig.dimensions.nx / gridConfig.chunks.x);
+            maxNy = Math.ceil(gridConfig.dimensions.ny / gridConfig.chunks.y);
+        }
+        const pNx = maxNx + 2 * padding;
+        const pNy = maxNy + 2 * padding;
+
+        const dt = scheme.params?.diffusion_rate ?? NeoHeatmapKernel.DEFAULT_DIFFUSION;
+        const decay = scheme.params?.decay_factor ?? NeoHeatmapKernel.DEFAULT_DECAY;
 
         const uRead = views[indices[scheme.source].read];
         const uWrite = views[indices[scheme.source].write];
-        const obstacles = indices['obstacles'] ? views[indices['obstacles'].read] : uRead;
+        
+        // Fix: Do not fallback obstacles to uRead, as it would treat data as walls!
+        const obstacles = indices['obstacles'] ? views[indices['obstacles'].read] : null;
         const injectionFaceName = scheme.params?.injection_face ?? 'injection_mask';
-        const injection = indices[injectionFaceName] ? views[indices[injectionFaceName].read] : uRead;
+        const injection = indices[injectionFaceName] ? views[indices[injectionFaceName].read] : null;
 
-        for (let py = 1; py < pNy - 1; py++) {
-            for (let px = 1; px < pNx - 1; px++) {
+        for (let py = padding; py < ny + padding; py++) {
+            for (let px = padding; px < nx + padding; px++) {
                 const i = py * pNx + px;
 
                 // 1. Is it a Wall?
-                if (obstacles[i] > 0.5) {
+                if (obstacles && obstacles[i] > 0.5) {
                     uWrite[i] = 0;
                     continue;
                 }
 
                 // 2. Continuous Injection (Radiators)
-                if (injection[i] > 0) {
+                if (injection && injection[i] > 0) {
                     uWrite[i] = injection[i]; // Thermostat override
                     continue;
                 }
 
                 // 3. Diffusion from Neighbors (Laplacian Stencil)
-                let sumHeat = 0;
-                let validNeighbors = 0;
-
-                // Orthogonal only (Von Neumann neighborhood)
-                if (obstacles[i - pNx] < 0.5) { sumHeat += uRead[i - pNx]; validNeighbors++; }
-                if (obstacles[i + pNx] < 0.5) { sumHeat += uRead[i + pNx]; validNeighbors++; }
-                if (obstacles[i + 1] < 0.5) { sumHeat += uRead[i + 1]; validNeighbors++; }
-                if (obstacles[i - 1] < 0.5) { sumHeat += uRead[i - 1]; validNeighbors++; }
-
+                // Harmonized with GPU: We don't skip obstacles, allowing heat to diffuse INTO them (eraser effect)
+                const laplacian = (
+                    uRead[i - pNx] + uRead[i + pNx] + uRead[i + 1] + uRead[i - 1]
+                ) - 4 * uRead[i];
+                
                 const uc = uRead[i] as number;
-                let newU = uc;
-
-                if (validNeighbors > 0) {
-                    const laplacian = sumHeat - validNeighbors * uc;
-                    newU += (dt as number) * laplacian;
-                }
+                let newU = uc + (dt as number) * laplacian;
 
                 // 4. Thermodynamic Decay
                 newU *= (decay as number);

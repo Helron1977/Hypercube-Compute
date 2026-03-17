@@ -6,7 +6,7 @@ import { HypercubeNeoFactory } from '../core/HypercubeNeoFactory';
 describe('Showcase Heatmap Initialization', () => {
     it('should successfully build the showcase-heatmap manifest without undefined errors', async () => {
         // Read manifest from disk
-        const manifestPath = path.resolve(__dirname, '../showcase/showcase-heatmap.json');
+        const manifestPath = path.resolve(__dirname, '../showcase/showcase-heat-gpu.json');
         const content = fs.readFileSync(manifestPath, 'utf8');
         const manifest = JSON.parse(content);
 
@@ -15,7 +15,8 @@ describe('Showcase Heatmap Initialization', () => {
         // Assert build does not throw errors (like the recent pingPong undefined error)
         let engine;
         try {
-            engine = await factory.build(manifest.config, manifest.engine);
+            const testConfig = { ...manifest.config, mode: 'cpu' };
+            engine = await factory.build(testConfig as any, manifest.engine);
         } catch (e: any) {
             expect.fail(`Engine build threw an error: ${e.message}`);
         }
@@ -27,7 +28,7 @@ describe('Showcase Heatmap Initialization', () => {
 
         // Verify DataContract has correct face counts
         const faceMappings = (engine.vGrid as any).dataContract.getFaceMappings();
-        expect(faceMappings.length).toBe(3); // obstacles, desirability, injection_mask
+        expect(faceMappings.length).toBe(2); // temperature, obstacles
 
         // Ensure boundaries fallback mapped correctly
         const topBoundary = engine.vGrid.chunks[0].joints.find((j: any) => j.face === 'top');

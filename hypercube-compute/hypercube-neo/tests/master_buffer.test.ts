@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { VirtualGrid } from '../core/VirtualGrid';
+import { VirtualGrid } from '../core/topology/VirtualGrid';
 import { MasterBuffer } from '../core/MasterBuffer';
 import { EngineDescriptor, HypercubeConfig } from '../core/types';
 
@@ -9,7 +9,7 @@ describe('Hypercube Neo: Physical MasterBuffer', () => {
         version: '1.0.0',
         faces: [
             { name: 'fi', type: 'population', isSynchronized: true }, // Should be Ping-Pong
-            { name: 'rho', type: 'macro', isSynchronized: false }    // Should be Single (if pingPong: true at requirement level, does it apply to all? Let's check logic)
+            { name: 'rho', type: 'macro', isSynchronized: false }    // Should be Single
         ],
         parameters: { viscosity: { name: 'Viscosity', type: 'number', default: 0.1 } },
         rules: [{ type: 'lbm-d2q9', method: 'Custom', source: 'fi' }],
@@ -26,20 +26,20 @@ describe('Hypercube Neo: Physical MasterBuffer', () => {
         mode: 'cpu'
     };
 
-    const vGrid = new VirtualGrid(config, lbmDescriptor);
-    const mBuffer = new MasterBuffer(vGrid);
-
     it('should allocate the correct total byte length', () => {
-        // DataContract logic: 
-        // face0 (fi) -> isSynchronized=true -> pingPong=true (from requirements) -> 2 buffers
-        // face1 (rho) -> isSynchronized=false -> pingPong=false -> 1 buffer
+        const vGrid = new VirtualGrid(config, lbmDescriptor);
+        const mBuffer = new MasterBuffer(vGrid);
         // Physical cells: (16+2)*(16+2) = 324
+        // Bytes per face raw: 324 * 4 = 1296
+        // Aligned per face: 1536 (next multiple of 256)
         // Total buffers = 3. 
-        // 3 * 324 * 4 bytes = 3888 bytes.
-        expect(mBuffer.byteLength).toBe(3888);
+        // 3 * 1536 bytes = 4608 bytes.
+        expect(mBuffer.byteLength).toBe(4608);
     });
 
     it('should provide zero-copy views into the same buffer', () => {
+        const vGrid = new VirtualGrid(config, lbmDescriptor);
+        const mBuffer = new MasterBuffer(vGrid);
         const chunk = mBuffer.getChunkViews('chunk_0_0_0');
         expect(chunk.faces.length).toBe(3);
 

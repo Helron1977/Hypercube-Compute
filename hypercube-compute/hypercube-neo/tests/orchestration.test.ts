@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { VirtualGrid } from '../core/VirtualGrid';
+import { VirtualGrid } from '../core/topology/VirtualGrid';
 import { EngineDescriptor, HypercubeConfig } from '../core/types';
 
 describe('Hypercube Neo: VirtualGrid Orchestration', () => {

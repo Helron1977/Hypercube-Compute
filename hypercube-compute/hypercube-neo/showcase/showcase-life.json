@@ -1,0 +1,21 @@
+{
+    "engine": {
+        "type": "neo-life-v1",
+        "params": {
+            "birth": [3],
+            "survival": [2, 3]
+        },
+        "faces": [
+            { "name": "cells", "isPingPong": true, "isSynchronized": true }
+        ]
+    },
+    "config": {
+        "mode": "auto",
+        "dimensions": { "nx": 256, "ny": 256, "nz": 1 },
+        "chunks": { "x": 1, "y": 1 }
+    },
+    "visualProfile": {
+        "colormap": "binary",
+        "range": [0, 1]
+    }
+}

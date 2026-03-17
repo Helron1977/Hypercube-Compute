@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hypercube Neo - Ocean Showcase 02 (GPU Zero-Stall)</title>
+    <title>Hypercube Neo - Ocean GPU</title>
+    <link rel="stylesheet" href="../assets/showcase.css">
     <style>
         body {
             margin: 0;
@@ -14,45 +13,45 @@
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
 
-        #hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 10;
-            pointer-events: none;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 25px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        }
-
-        #hud h1 {
-            margin: 0 0 10px 0;
-            font-size: 1.2rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            color: #e0e0e0;
-        }
-
-        #hud .stat-row {
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 5px;
-            font-size: 0.9rem;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1a0a16 0%, #050f23 100%);
         }
 
-        #hud .stat-label {
-            color: #8892b0;
-            margin-right: 15px;
+        canvas {
+            max-width: 98vw;
+            max-height: 98vh;
+            border-radius: 4px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), 0 0 2px rgba(255, 255, 255, 0.1);
         }
 
-        #hud .stat-value {
-            font-family: monospace;
-            font-weight: 500;
-            color: #64ffda;
+        /* Premium Hub Button */
+        .hub-button {
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            z-index: 9999 !important;
+            background: rgba(0, 0, 0, 0.6) !important;
+            backdrop-filter: blur(10px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            padding: 8px 16px !important;
+            border-radius: 8px !important;
+            color: #fff !important;
+            text-decoration: none !important;
+            font-family: 'Inter', sans-serif !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1px !important;
+            font-size: 0.75rem !important;
+            transition: all 0.3s ease !important;
+        }
+        .hub-button:hover {
+            background: rgba(0, 242, 255, 0.2) !important;
+            border-color: #00f2ff !important;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.3) !important;
         }
 
         #instructions {
@@ -69,19 +68,20 @@
             color: #a0aec0;
             font-size: 0.85rem;
             letter-spacing: 0.5px;
+            backdrop-filter: blur(5px);
         }
     </style>
 </head>
 
 <body>
-    <!-- Main simulation canvas container (handled by orchestrator) -->
+    <div id="canvas-container"></div>
+    
+    <a href="../index.html" class="hub-button">Back to Hub</a>
 
     <div id="instructions">
-        <span>🖱️ Click & drag to generate ocean waves & bio-luminescence</span>
+        <span>🌊 Click & drag to generate ocean waves & bio-luminescence (GPU)</span>
     </div>
 
-    <!-- Vite module injection for Neo orchestration -->
     <script type="module" src="./ocean.ts"></script>
 </body>
-
 </html>

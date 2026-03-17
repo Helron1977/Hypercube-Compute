@@ -1,0 +1,39 @@
+{
+    "$schema": "https://hypercube-neo.dev/schema/v4.json",
+    "name": "Heat Diffusion Showcase CPU",
+    "version": "1.0.0",
+    "engine": {
+        "name": "Heat-CPU",
+        "version": "1.0.0",
+        "faces": [
+            { "name": "temperature", "type": "scalar", "isPingPong": true },
+            { "name": "obstacles", "type": "mask", "isReadOnly": true }
+        ],
+        "rules": [
+            {
+                "type": "neo-heat",
+                "source": "temperature",
+                "params": {
+                    "diffusion_rate": 0.2,
+                    "decay_factor": 0.999
+                }
+            }
+        ],
+        "requirements": {
+            "ghostCells": 1,
+            "pingPong": true
+        }
+    },
+    "config": {
+        "mode": "cpu",
+        "dimensions": { "nx": 512, "ny": 256, "nz": 1 },
+        "chunks": { "x": 2, "y": 1 },
+        "boundaries": {
+            "all": { "role": "wall" }
+        },
+        "params": {
+            "pixelScale": 2.0
+        },
+        "engine": "Heat-CPU"
+    }
+}

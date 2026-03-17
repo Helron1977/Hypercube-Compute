@@ -1,5 +1,5 @@
 import { IDispatcher } from './IDispatcher';
-import { IVirtualGrid, IMasterBuffer } from './GridAbstractions';
+import { IVirtualGrid, IMasterBuffer } from './topology/GridAbstractions';
 import { ParityManager } from './ParityManager';
 import { KernelRegistry } from './kernels/KernelRegistry';
 import { DataContract } from './DataContract';
@@ -30,12 +30,22 @@ export class NumericalDispatcher implements IDispatcher {
         }
 
         // 2. Pre-compute kernel parameters once per step
+        // We find the max dimensions across all chunks to ensure a uniform stride in kernels
+        let maxNx = 0, maxNy = 0;
+        for (const chunk of this.vGrid.chunks) {
+            maxNx = Math.max(maxNx, chunk.localDimensions.nx);
+            maxNy = Math.max(maxNy, chunk.localDimensions.ny);
+        }
+
         const kernelParams = {
             dimensions: this.vGrid.dimensions,
+            maxDimensions: { nx: maxNx, ny: maxNy }, // Vital for stride calculation
             chunks: this.vGrid.chunkLayout,
+            chunksList: this.vGrid.chunks,
             boundaries: grid.config?.boundaries,
             time: t,
-            tick: this.parityManager.currentTick
+            tick: this.parityManager.currentTick,
+            padding: descriptor.requirements.ghostCells
         };
 
         // 3. Iterate through all chunks

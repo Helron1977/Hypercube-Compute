@@ -54,7 +54,10 @@ await engine.step(); // Execute one physics frame
 Learn how to configure your manifestations realistically:
 - **[Aero Showcase Guide](./docs/showcase-aero.md)**: Deep dive into parameterizing fluid dynamics (LBM D2Q9) and wind tunnels.
 - **[Ocean Showcase Guide](./docs/showcase-ocean.md)**: Understand 2.5D LBM boundaries, bio-advection and fluid height settings on topological grids.
-- **[SDF Engine Showcase Guide](./docs/showcase-sdf.md)**: Jump Flooding Algorithm computing $O(log N)$ Euclidean distances evaluated analytically in $O(1)$ for multi-criteria Decision Making.
+- **[SDF Engine Showcase Guide](./docs/showcase-sdf.md)**: Jump Flooding Algorithm computing $O(log N)$ Euclidean distances.
+- **[Game of Life Showcase Guide](./docs/showcase-life.md)**: Cellular Automata rules and ping-pong state management.
+- **[Pathfinder Showcase Guide](./docs/showcase-path.md)**: Wavefront distance propagation for spatial navigation.
+- **[Tensor CP Showcase Guide](./docs/showcase-tensor-cp.md)**: Non-physical data science via Alternating Least Squares (ALS) decomposition.
 
 ---
 *Hypercube Neo is part of the MonOs Cognitive Copilot ecosystem.*

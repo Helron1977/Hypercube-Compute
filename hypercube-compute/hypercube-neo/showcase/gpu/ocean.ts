@@ -16,17 +16,22 @@ async function main() {
     // 2. Build Engine
     const engine = await factory.build(config, descriptor);
 
+    // IA Observability (Web MCP)
+    const { DebugBridge } = await import('../../helpers/DebugBridge');
+    DebugBridge.setup(engine, config);
+
     const NX = config.dimensions.nx;
     const NY = config.dimensions.ny;
 
     // 3. Setup Layout
+    const container = document.getElementById('canvas-container') || document.body;
     const canvas = document.createElement('canvas');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     canvas.style.position = 'absolute';
     canvas.style.top = '0';
     canvas.style.left = '0';
-    document.body.appendChild(canvas);
+    container.appendChild(canvas);
 
     const hud = new BenchmarkHUD('OceanEngine GPU (Zero-Stall)', `${NX} x ${NY}`);
 
@@ -100,6 +105,7 @@ async function main() {
     });
 
     // 6. Initialization
+    await (engine as any).mBuffer.syncToDevice();
     let isInitialized = false;
 
     async function loop() {
@@ -109,6 +115,16 @@ async function main() {
             // GPU physics dispatch
             await engine.step(1);
             const ms = performance.now() - start;
+
+            // One-time initialization — remove grid_init and splash_init after first step
+            if (!isInitialized) {
+                if (config.objects) {
+                    config.objects = config.objects.filter((o: any) => 
+                        o.id !== 'grid_init' && o.id !== 'splash_init'
+                    );
+                }
+                isInitialized = true;
+            }
 
             // Clean up transient splash objects after they've been injected into WGSL
             if (config.objects) {

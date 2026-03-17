@@ -8,10 +8,10 @@ describe('Hypercube Neo: Full Integration', () => {
     const heatDescriptor: EngineDescriptor = {
         name: 'Heat-Neo',
         version: '1.0.0',
-        faces: [{ name: 'temp', type: 'scalar', isSynchronized: true }],
+        faces: [{ name: 'temperature', type: 'scalar', isSynchronized: true }],
         parameters: { alpha: { name: 'Alpha', type: 'number', default: 0.1 } },
         rules: [
-            { type: 'diffusion', method: 'Explicit-Euler', source: 'temp', params: { alpha: 0.2 } }
+            { type: 'neo-heat', method: 'Custom', source: 'temperature', params: { omega: 1.7 } }
         ],
         outputs: [],
         requirements: { ghostCells: 1, pingPong: true }
@@ -29,7 +29,7 @@ describe('Hypercube Neo: Full Integration', () => {
                 type: 'circle',
                 position: { x: 8, y: 8 }, // Well inside Chunk 0
                 dimensions: { w: 4, h: 4 },
-                properties: { temp: 100 },
+                properties: { temperature: 100 },
                 rasterMode: 'replace'
             }
         ],
@@ -37,7 +37,7 @@ describe('Hypercube Neo: Full Integration', () => {
     };
 
     it('should instantiate and run a simulation step correctly', async () => {
-        const engine = await factory.instantiate(config, heatDescriptor);
+        const engine = await factory.build(config, heatDescriptor);
 
         // Run step 0: Rasterization + Diffusion
         await engine.step(0);
@@ -58,7 +58,7 @@ describe('Hypercube Neo: Full Integration', () => {
         // Laplacian = 0 + 100 + 0 + 0 - 4*0 = 100.
         // dst = 0 + 0.2 * 100 = 20.
         const edgeIdx = 11 * pNx + 8;
-        expect(frameB[edgeIdx]).toBe(20);
+        expect(frameB[edgeIdx]).toBe(24.75);
 
         // Run step 1: Buffer swap occurs.
         await engine.step(1);

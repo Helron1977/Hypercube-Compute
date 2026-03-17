@@ -9,12 +9,13 @@ describe('Showcase Heatmap UI & Rendering Logic', () => {
     let manifest: any;
 
     beforeEach(async () => {
-        const manifestPath = path.resolve(__dirname, '../showcase/showcase-heatmap.json');
+        const manifestPath = path.resolve(__dirname, '../showcase/showcase-heat-gpu.json');
         const content = fs.readFileSync(manifestPath, 'utf8');
         manifest = JSON.parse(content);
 
         // Force sequential mode for Node.js Vitest environment (no window.Worker)
         manifest.config.executionMode = 'sequential';
+        manifest.config.mode = 'cpu';
 
         const factory = new HypercubeNeoFactory();
         engine = await factory.build(manifest.config, manifest.engine);
@@ -22,15 +23,11 @@ describe('Showcase Heatmap UI & Rendering Logic', () => {
 
     it('should correctly resolve face indices through ParityManager for rendering', () => {
         // Simulates the exact logic on line 165 of heatmap.ts
-        const desirabilityIndices = engine.parityManager.getFaceIndices('desirability_metro');
-        const obstaclesIndices = engine.parityManager.getFaceIndices('obstacles');
+        const faceIdx = engine.getFaceLogicalIndex('temperature');
+        expect(faceIdx).toBeDefined();
 
-        // Verify we got valid numeric indices back
-        expect(typeof desirabilityIndices.read).toBe('number');
-        expect(typeof obstaclesIndices.read).toBe('number');
-
-        // Ensure they point to different memory locations
-        expect(desirabilityIndices.read).not.toBe(obstaclesIndices.read);
+        const phys = engine.parityManager.getFaceIndices('temperature');
+        expect(phys.read).toBeGreaterThanOrEqual(0);
     });
 
     it('should reliably inject global masks across 2x2 chunks preventing IndexOutOfBounds', () => {
@@ -66,19 +63,19 @@ describe('Showcase Heatmap UI & Rendering Logic', () => {
             }
         };
 
-        const size = 512;
+        const size = 256;
         const dummyInjectionMask = new Float32Array(size * size).fill(1.5);
 
-        injectGlobalMask(engine, 'injection_metro', dummyInjectionMask, size);
+        injectGlobalMask(engine, 'temperature', dummyInjectionMask, size);
 
         // Validate mask made it to the memory buffer array
-        const readIdx = engine.parityManager.getFaceIndices('injection_metro').read;
-        const firstChunkFaces = (engine.mBuffer as any).getChunkViews('chunk_0_0_0').faces;
+        const fIdx = engine.parityManager.getFaceIndices('temperature').read;
+        const chunk0 = engine.mBuffer.getChunkViews('chunk_0_0_0').faces[fIdx];
 
         // Assert the injection values were placed into the grid
-        expect(firstChunkFaces[readIdx]).toBeDefined();
+        expect(chunk0).toBeDefined();
         // Since the inner cells were written, find one and assert it is 1.5
-        // Inner cell (1,1) -> row_offset = 1*(256+2) = 258.  Cell = 258+1 = 259
-        expect(firstChunkFaces[readIdx][259]).toBe(1.5);
+        // Inner cell (1,1) -> row_offset = 1*(256+2) = 258. Cell = 258+1 = 259
+        expect(chunk0[259]).toBe(1.5);
     });
 });

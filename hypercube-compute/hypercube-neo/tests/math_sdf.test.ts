@@ -1,59 +1,56 @@
 import { describe, it, expect } from 'vitest';
-import { NeoSDFKernel } from './core/kernels/NeoSDFKernel';
-import { HypercubeConfig, NumericalScheme } from './core/types';
-import { VirtualChunk } from './core/GridAbstractions';
+import { NeoSDFKernel } from '../core/kernels/NeoSDFKernel';
+import { HypercubeConfig, NumericalScheme } from '../core/types';
+import { VirtualChunk } from '../core/topology/GridAbstractions';
 
-describe('SDF Jump Flooding Algorithm Math', () => {
+describe('Hypercube Neo: Math SDF Kernels', () => {
+    const kernel = new NeoSDFKernel();
+    const config: HypercubeConfig = {
+        dimensions: { nx: 8, ny: 8, nz: 1 },
+        chunks: { x: 1, y: 1 },
+        boundaries: { all: { role: 'wall' } },
+        engine: 'test',
+        params: {}, mode: 'cpu'
+    };
 
-    it('should correctly propagate distances in O(1) mathematically', () => {
-        // Setup a 4x4 Grid for testing
-        const nx = 4, ny = 4;
-        const pNx = nx + 2, pNy = ny + 2;
-        const totalSize = pNx * pNy;
+    it('should compute valid SDF for a simple seed', () => {
+        const nx = 8, ny = 8, padding = 1;
+        const pNx = nx + 2 * padding;
+        const pNy = ny + 2 * padding;
+        const size = pNx * pNy;
 
-        const xRead = new Float32Array(totalSize).fill(-10000);
-        const yRead = new Float32Array(totalSize).fill(-10000);
-        const xWrite = new Float32Array(totalSize).fill(-10000);
-        const yWrite = new Float32Array(totalSize).fill(-10000);
+        const sdfX = new Float32Array(size).fill(-10000);
+        const sdfY = new Float32Array(size).fill(-10000);
+        
+        // Seed at local coords (4,4) -> world (3,3)
+        // px = 3 + 1 = 4, py = 3 + 1 = 4
+        // The coordinate stored is the world coordinate (3,3)
+        sdfX[4 * pNx + 4] = 3;
+        sdfY[4 * pNx + 4] = 3;
 
-        // Inject a single seed exactly at grid coordinates (1, 1) -> which is array index (1+1)*pNx + (1+1) -> (2,2)
-        // Wait, chunk global offset is 0. 
-        // px=2 is Physical X 1.
-        // Let's just say the seed is at (1,1) in the world.
-        const seedX = 1;
-        const seedY = 1;
-        // In array coords: (seedY+1)*pNx + (seedX+1)
-        const seedIdx = (seedY + 1) * pNx + (seedX + 1);
-        xRead[seedIdx] = seedX;
-        yRead[seedIdx] = seedY;
-
-        const views = [xRead, yRead, xWrite, yWrite];
-        const indices = {
-            'sdf_test_x': { read: 0, write: 2 },
-            'sdf_test_y': { read: 1, write: 3 }
+        const views = [sdfX, sdfY];
+        const scheme: NumericalScheme = { type: 'neo-sdf', source: 'sdf', params: {} };
+        const indices = { 
+            'sdf_x': { read: 0, write: 0 },
+            'sdf_y': { read: 1, write: 1 }
         };
 
-        const config: HypercubeConfig = {
-            mode: 'cpu',
-            dimensions: { nx, ny, nz: 1 },
-            chunks: { x: 1, y: 1 },
-            boundaries: { all: { role: 'joint' } },
-            engine: 'test'
+        const chunk: VirtualChunk = {
+            id: 'test',
+            x: 0, y: 0, z: 0,
+            localDimensions: { nx: 100, ny: 100, nz: 1 },
+            joints: []
         };
-        const chunk: VirtualChunk = { id: 'test', x: 0, y: 0, z: 0, joints: [] };
-        const scheme: NumericalScheme = { type: 'neo-sdf', source: 'sdf_test' };
 
-        const kernel = new NeoSDFKernel();
-
-        // Run 1 pass
         kernel.execute(views, scheme, indices, config, chunk);
 
-        // Check the pixel at (2,2) in the world. Its array index is (2+1)*pNx + (2+1)
-        const targetIdx = 3 * pNx + 3;
-
-        // It SHOULD have received the seed from (1,1)
-        expect(xWrite[targetIdx]).toBe(1);
-        expect(yWrite[targetIdx]).toBe(1);
+        // Best seed at (4,4) should be (3,3)
+        expect(sdfX[4 * pNx + 4]).toBe(3);
+        expect(sdfY[4 * pNx + 4]).toBe(3);
+        
+        // At (5,4) -> world (4,3). Neighbors include (4,4) which has seed (3,3).
+        // Distance from (4,3) to (3,3) is 1.
+        expect(sdfX[4 * pNx + 5]).toBe(3);
+        expect(sdfY[4 * pNx + 5]).toBe(3);
     });
-
 });

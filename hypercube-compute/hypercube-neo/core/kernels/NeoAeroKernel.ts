@@ -1,6 +1,7 @@
 import { IKernel } from './IKernel';
 import { NumericalScheme } from '../types';
-import { VirtualChunk } from '../GridAbstractions';
+import { VirtualChunk } from '../topology/GridAbstractions';
+import { TopologyResolver, BoundaryRoleID } from '../topology/TopologyResolver';
 
 /**
  * NeoAeroKernel
@@ -8,6 +9,11 @@ import { VirtualChunk } from '../GridAbstractions';
  * Structure: Optimized for Stability and Zero-Copy safety via 'Self-Copy' world boundaries.
  */
 export class NeoAeroKernel implements IKernel {
+    public static readonly DEFAULT_OMEGA = 1.75;
+    public static readonly DEFAULT_INFLOW_UX = 0.12;
+
+    private topoResolver = new TopologyResolver();
+
     public execute(
         views: Float32Array[],
         scheme: NumericalScheme,
@@ -15,13 +21,25 @@ export class NeoAeroKernel implements IKernel {
         gridConfig: any,
         chunk: VirtualChunk
     ): void {
-        const nx = Math.floor(gridConfig.dimensions.nx / gridConfig.chunks.x);
-        const ny = Math.floor(gridConfig.dimensions.ny / gridConfig.chunks.y);
-        const padding = 1;
-        const pNx = nx + 2;
-        const pNy = ny + 2;
+        const nx = chunk.localDimensions.nx;
+        const ny = chunk.localDimensions.ny;
+        const padding = gridConfig.padding ?? 1;
 
-        const omega = (scheme.params?.omega as number) || 1.75;
+        // The stride (pNx) is based on the grid's MAX dimensions managed by MasterBuffer
+        let maxNx = 0;
+        let maxNy = 0;
+        if (gridConfig.maxDimensions) {
+            maxNx = gridConfig.maxDimensions.nx;
+            maxNy = gridConfig.maxDimensions.ny;
+        } else {
+            // Fallback for standalone tests or if not provided
+            maxNx = Math.ceil(gridConfig.dimensions.nx / gridConfig.chunks.x);
+            maxNy = Math.ceil(gridConfig.dimensions.ny / gridConfig.chunks.y);
+        }
+        const pNx = maxNx + 2 * padding;
+        const pNy = maxNy + 2 * padding;
+
+        const omega = (scheme.params?.omega as number) || NeoAeroKernel.DEFAULT_OMEGA;
         const om_1 = 1.0 - omega;
 
         const f0_in = views[indices['f0'].read], f1_in = views[indices['f1'].read], f2_in = views[indices['f2'].read];
@@ -40,12 +58,14 @@ export class NeoAeroKernel implements IKernel {
         const smoke_in = views[indices['smoke'].read];
         const smoke_out = views[indices['smoke'].write];
 
-        const isLeft = chunk.x === 0;
-        const isRight = chunk.x === gridConfig.chunks.x - 1;
-        const isTop = chunk.y === 0;
-        const isBottom = chunk.y === gridConfig.chunks.y - 1;
+        // Resolve topology roles for this chunk
+        const topo = this.topoResolver.resolve(chunk, gridConfig.chunks, gridConfig.boundaries);
+        const isLeft = topo.leftRole !== BoundaryRoleID.CONTINUITY;
+        const isRight = topo.rightRole !== BoundaryRoleID.CONTINUITY;
+        const isTop = topo.topRole !== BoundaryRoleID.CONTINUITY;
+        const isBottom = topo.bottomRole !== BoundaryRoleID.CONTINUITY;
 
-        const inflowUx = (scheme.params?.inflowUx as number) || 0.12;
+        const inflowUx = (scheme.params?.inflowUx as number) || NeoAeroKernel.DEFAULT_INFLOW_UX;
 
         // --- STEP 1: LBM ---
         for (let py = padding; py < ny + padding; py++) {
@@ -58,7 +78,9 @@ export class NeoAeroKernel implements IKernel {
                 // 1. OBSTACLES (Static Priority)
                 const obs = obstacles[i];
                 if (obs > 0.99) {
-                    ux_out[i] = 0; uy_out[i] = 0; smoke_out[i] = 0;
+                    ux_out[i] = 0; uy_out[i] = 0; 
+                    // Smoke is preserved to allow obstacles to act as persistent sources
+                    smoke_out[i] = smoke_in[i]; 
                     f0_out[i] = 4.0 / 9.0;
                     f1_out[i] = 1.0 / 9.0; f2_out[i] = 1.0 / 9.0; f3_out[i] = 1.0 / 9.0; f4_out[i] = 1.0 / 9.0;
                     f5_out[i] = 1.0 / 36.0; f6_out[i] = 1.0 / 36.0; f7_out[i] = 1.0 / 36.0; f8_out[i] = 1.0 / 36.0;
@@ -70,37 +92,35 @@ export class NeoAeroKernel implements IKernel {
                 const isWorldRight = isRight && px === nx + padding - 1;
 
                 if (isWorldLeft || isWorldRight || isWorldTop || isWorldBottom) {
-                    // SELF-COPY: Replicate legacy 'skip' behavior by matching READ to WRITE.
-                    // This is essential for bit-fidelity (uses legacy initial state) and stability (overwrites Zero-Copy trash).
-                    ux_out[i] = ux_in[i]; uy_out[i] = uy_in[i]; smoke_out[i] = smoke_in[i];
-                    f0_out[i] = f0_in[i]; f1_out[i] = f1_in[i]; f2_out[i] = f2_in[i]; f3_out[i] = f3_in[i]; f4_out[i] = f4_in[i];
-                    f5_out[i] = f5_in[i]; f6_out[i] = f6_in[i]; f7_out[i] = f7_in[i]; f8_out[i] = f8_in[i];
+                    // INFLOW (Exclusive to Left Boundary if set)
+                    if (isWorldLeft && topo.leftRole === BoundaryRoleID.INFLOW) {
+                        let scale = 1.0;
+                        const ly = py - padding;
+                        if (isTop && topo.topRole === BoundaryRoleID.WALL && ly < 16) scale = ly / 16.0;
+                        if (isBottom && topo.bottomRole === BoundaryRoleID.WALL && ly > ny - 17) scale = (ny - 1 - ly) / 16.0;
+                        const inUx = inflowUx * scale; const inRho = 1.0;
+                        ux_out[i] = inUx; uy_out[i] = 0;
+                        const u_sq_15 = 1.5 * (inUx * inUx);
+                        f0_out[i] = (4.0 / 9.0) * inRho * (1.0 - u_sq_15);
+                        const cu1 = inUx; f1_out[i] = (1.0 / 9.0) * inRho * (1.0 + 3.0 * cu1 + 4.5 * cu1 * cu1 - u_sq_15);
+                        const cu2 = 0; f2_out[i] = (1.0 / 9.0) * inRho * (1.0 + 3.0 * cu2 + 4.5 * cu2 * cu2 - u_sq_15);
+                        const cu3 = -inUx; f3_out[i] = (1.0 / 9.0) * inRho * (1.0 + 3.0 * cu3 + 4.5 * cu3 * cu3 - u_sq_15);
+                        const cu4 = 0; f4_out[i] = (1.0 / 9.0) * inRho * (1.0 + 3.0 * cu4 + 4.5 * cu4 * cu4 - u_sq_15);
+                        const cu5 = inUx; f5_out[i] = (1.0 / 36.0) * inRho * (1.0 + 3.0 * cu5 + 4.5 * cu5 * cu5 - u_sq_15);
+                        const cu6 = -inUx; f6_out[i] = (1.0 / 36.0) * inRho * (1.0 + 3.0 * cu6 + 4.5 * cu6 * cu6 - u_sq_15);
+                        const cu7 = -inUx; f7_out[i] = (1.0 / 36.0) * inRho * (1.0 + 3.0 * cu7 + 4.5 * cu7 * cu7 - u_sq_15);
+                        const cu8 = inUx; f8_out[i] = (1.0 / 36.0) * inRho * (1.0 + 3.0 * cu8 + 4.5 * cu8 * cu8 - u_sq_15);
+                    } else {
+                        // SELF-COPY: Replicate legacy 'skip' behavior for walls/unknowns.
+                        ux_out[i] = ux_in[i]; uy_out[i] = uy_in[i]; smoke_out[i] = smoke_in[i];
+                        f0_out[i] = f0_in[i]; f1_out[i] = f1_in[i]; f2_out[i] = f2_in[i]; f3_out[i] = f3_in[i]; f4_out[i] = f4_in[i];
+                        f5_out[i] = f5_in[i]; f6_out[i] = f6_in[i]; f7_out[i] = f7_in[i]; f8_out[i] = f8_in[i];
+                    }
                     continue;
                 }
 
-                // INFLOW (at Global Col 1)
-                if (isLeft && px === padding + 1) {
-                    let scale = 1.0;
-                    const ly = py - padding;
-                    if (isTop && ly < 16) scale = ly / 16.0;
-                    if (isBottom && ly > ny - 17) scale = (ny - 1 - ly) / 16.0;
-                    const inUx = inflowUx * scale; const inRho = 1.0;
-                    ux_out[i] = inUx; uy_out[i] = 0;
-                    const u_sq_15 = 1.5 * (inUx * inUx);
-                    f0_out[i] = (4.0 / 9.0) * inRho * (1.0 - u_sq_15);
-                    const cu1 = inUx; f1_out[i] = (1.0 / 9.0) * inRho * (1.0 + 3.0 * cu1 + 4.5 * cu1 * cu1 - u_sq_15);
-                    const cu2 = 0; f2_out[i] = (1.0 / 9.0) * inRho * (1.0 + 3.0 * cu2 + 4.5 * cu2 * cu2 - u_sq_15);
-                    const cu3 = -inUx; f3_out[i] = (1.0 / 9.0) * inRho * (1.0 + 3.0 * cu3 + 4.5 * cu3 * cu3 - u_sq_15);
-                    const cu4 = 0; f4_out[i] = (1.0 / 9.0) * inRho * (1.0 + 3.0 * cu4 + 4.5 * cu4 * cu4 - u_sq_15);
-                    const cu5 = inUx; f5_out[i] = (1.0 / 36.0) * inRho * (1.0 + 3.0 * cu5 + 4.5 * cu5 * cu5 - u_sq_15);
-                    const cu6 = -inUx; f6_out[i] = (1.0 / 36.0) * inRho * (1.0 + 3.0 * cu6 + 4.5 * cu6 * cu6 - u_sq_15);
-                    const cu7 = -inUx; f7_out[i] = (1.0 / 36.0) * inRho * (1.0 + 3.0 * cu7 + 4.5 * cu7 * cu7 - u_sq_15);
-                    const cu8 = inUx; f8_out[i] = (1.0 / 36.0) * inRho * (1.0 + 3.0 * cu8 + 4.5 * cu8 * cu8 - u_sq_15);
-                    continue;
-                }
-
-                // OUTFLOW (at Global Col NX-2)
-                if (isRight && px === nx + padding - 2) {
+                // OUTFLOW (at Global Col NX-2 if Right is Outflow)
+                if (isRight && px === nx + padding - 2 && topo.rightRole === BoundaryRoleID.OUTFLOW) {
                     const prev = i - 1;
                     const uH = ux_out[prev]; const vH = uy_out[prev];
                     const u2 = 1.5 * (uH * uH + vH * vH);
@@ -192,7 +212,10 @@ export class NeoAeroKernel implements IKernel {
             for (let px = padding; px < nx + padding; px++) {
                 const i = py * pNx + px;
                 const obs = obstacles[i];
-                if (obs > 0.99) { smoke_out[i] = 0; continue; }
+                if (obs > 0.99) { 
+                    smoke_out[i] = smoke_in[i]; 
+                    continue; 
+                }
 
                 const vx = ux_out[i]; const vy = uy_out[i];
                 const sx = px - vx; const sy = py - vy;
@@ -211,10 +234,22 @@ export class NeoAeroKernel implements IKernel {
                 const neighborAvg = (smoke_in[i - 1] + smoke_in[i + 1] + smoke_in[i - pNx] + smoke_in[i + pNx]) * 0.25;
                 smoke_out[i] = (raw * 0.995 + neighborAvg * 0.005) * 0.9999;
 
-                if (isLeft && px === padding + 1) {
-                    const pitch = Math.floor(ny / 20);
-                    const ly = py - padding;
-                    if ((ly + 2) % pitch <= 2) smoke_out[i] = 1.0;
+                if (isLeft && topo.leftRole === BoundaryRoleID.INFLOW && px === padding) {
+                    // Global Y for continuous stripes across chunks
+                    let worldY0 = 0;
+                    if (gridConfig.chunksList) { // Use chunksList if available for performance
+                        for (const c of gridConfig.chunksList) {
+                            if (c.x === chunk.x && c.z === chunk.z && c.y < chunk.y) worldY0 += c.localDimensions.ny;
+                        }
+                    } else if (gridConfig.vGrid?.chunks) {
+                         for (const c of gridConfig.vGrid.chunks) {
+                            if (c.x === chunk.x && c.z === chunk.z && c.y < chunk.y) worldY0 += c.localDimensions.ny;
+                        }
+                    }
+                    
+                    const worldY = worldY0 + (py - padding);
+                    const pitch = 25; // Matching legacy visual
+                    if ((worldY + 2) % pitch <= 2) smoke_out[i] = 1.0;
                 }
             }
         }

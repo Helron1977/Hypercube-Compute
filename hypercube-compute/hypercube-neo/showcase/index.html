@@ -98,6 +98,7 @@
             margin-bottom: 16px;
             background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.4) 100%);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -276,12 +277,73 @@
 
     <div class="section-title">Case 03: Spatial Decision Engine</div>
     <div class="grid">
-        <a href="sdf.html" class="card">
+        <a href="sdf-cpu.html" class="card">
             <span class="card-icon">⚡</span>
-            <h2>SDF Engine (O(1)) <span class="badge badge-cpu"
-                    style="border-color:#eab308; color:#eab308;">Analytical</span></h2>
-            <p>Calcul géométrique exact des distances via Jump Flooding Algorithm. Recherche O(1) multi-critères
-                temps-réel avec gestion des obstacles.</p>
+            <h2>SDF CPU <span class="badge badge-cpu" style="border-color:#eab308; color:#eab308;">Analytical</span></h2>
+            <p>Calcul géométrique des distances via itérations CPU. Recherche O(1) multi-critères temps-réel avec gestion des obstacles.</p>
+        </a>
+
+        <a href="sdf-gpu.html" class="card">
+            <span class="card-icon">⚡</span>
+            <h2>SDF GPU <span class="badge badge-gpu" style="border-color:#ff00c8; color:#ff00c8;">WebGPU</span></h2>
+            <p>Accélération WebGPU massive pour le calcul des champs de distance. Performance extrême pour les simulations urbaines complexes.</p>
+        </a>
+    </div>
+
+    <div class="section-title">Case 04: Heat Diffusion (Laplacian)</div>
+    <div class="grid">
+        <a href="heat-cpu.html" class="card">
+            <span class="card-icon">🔥</span>
+            <h2>Heat (CPU) <span class="badge badge-cpu">Multi-Thread</span></h2>
+            <p>Thermal diffusion simulation using a 9-point Laplacian stencil. Demonstrates dynamic heat sources and mobile puits.</p>
+        </a>
+
+        <a href="heat-gpu.html" class="card">
+            <span class="card-icon">⚡</span>
+            <h2>Heat (GPU) <span class="badge badge-gpu">WebGPU</span></h2>
+            <p>Real-time heat diffusion accelerated by WebGPU. High-performance thermal modeling with direct VRAM rendering.</p>
+        </a>
+    </div>
+
+    <div class="section-title">Case 05: Cellular Automata</div>
+    <div class="grid">
+        <a href="cpu/life.html" class="card">
+            <span class="card-icon">🧬</span>
+            <h2>Game of Life (CPU) <span class="badge badge-cpu">B3/S23</span></h2>
+            <p>Conway's implementation on the Neo CPU grid. Demonstrates O(1) multi-chunk neighborhood resolution.</p>
+        </a>
+
+        <a href="gpu/life.html" class="card">
+            <span class="card-icon">⚡</span>
+            <h2>Game of Life (GPU) <span class="badge badge-gpu">WebGPU</span></h2>
+            <p>WebGPU-accelerated Game of Life. Massive parallelism on the hypercube topology.</p>
+        </a>
+
+        <a href="cpu/path.html" class="card">
+            <span class="card-icon">🗺️</span>
+            <h2>Pathfinder (CPU) <span class="badge badge-cpu">Wavefront</span></h2>
+            <p>Spatial pathfinding via distance field propagation. Respects obstacle geometry in real-time.</p>
+        </a>
+
+        <a href="gpu/path.html" class="card">
+            <span class="card-icon">🛰️</span>
+            <h2>Pathfinder (GPU) <span class="badge badge-gpu">WebGPU</span></h2>
+            <p>Wavefront propagation on the GPU. Extremely fast distance field calculation for complex maps.</p>
+        </a>
+    </div>
+
+    <div class="section-title">Case 06: Non-Physical Compute</div>
+    <div class="grid">
+        <a href="cpu/tensor.html" class="card">
+            <span class="card-icon">📊</span>
+            <h2>Tensor CP (CPU) <span class="badge badge-cpu" style="border-color:#10b981; color:#10b981;">Data Science</span></h2>
+            <p>CANDECOMP/PARAFAC decomposition via ALS. Uses Neo topology for latent factor patterns.</p>
+        </a>
+
+        <a href="gpu/tensor.html" class="card">
+            <span class="card-icon">🧠</span>
+            <h2>Tensor CP (GPU) <span class="badge badge-gpu" style="border-color:#10b981; color:#10b981;">WebGPU</span></h2>
+            <p>GPU-accelerated tensor algebra. Demonstrates non-physical utility of the Hypercube engine.</p>
         </a>
     </div>
 

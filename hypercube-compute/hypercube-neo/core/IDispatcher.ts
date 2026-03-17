@@ -1,4 +1,4 @@
-import { VirtualChunk } from './GridAbstractions';
+import { VirtualChunk } from './topology/GridAbstractions';
 import { NumericalScheme } from './types';
 
 /**

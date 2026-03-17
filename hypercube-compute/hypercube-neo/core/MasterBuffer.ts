@@ -1,4 +1,4 @@
-import { IMasterBuffer, IPhysicalChunk, IVirtualGrid } from './GridAbstractions';
+import { IMasterBuffer, IPhysicalChunk, IVirtualGrid } from './topology/GridAbstractions';
 import { DataContract } from './DataContract';
 import { HypercubeGPUContext } from './gpu/HypercubeGPUContext';
 
@@ -20,26 +20,24 @@ export class MasterBuffer implements IMasterBuffer {
         const dataContract = grid.dataContract as DataContract;
         const faceMappings = dataContract.getFaceMappings();
 
-        const nx = Math.floor(grid.config.dimensions.nx / grid.config.chunks.x);
-        const ny = Math.floor(grid.config.dimensions.ny / grid.config.chunks.y);
-        const nz = Math.floor((grid.config.dimensions.nz || 1) / (grid.config.chunks.z || 1));
-        const cellsPerFaceRaw = (nx + 2) * (ny + 2) * (grid.config.dimensions.nz > 1 ? (nz + 2) : 1);
+        // Find the maximum local dimensions to ensure uniform stride across all chunks
+        let maxNx = 0, maxNy = 0, maxNz = 0;
+        for (const chunk of this.vGrid.chunks) {
+            maxNx = Math.max(maxNx, chunk.localDimensions.nx);
+            maxNy = Math.max(maxNy, chunk.localDimensions.ny);
+            maxNz = Math.max(maxNz, chunk.localDimensions.nz ?? 1);
+        }
 
-        // WebGPU Alignment: Storage buffer offsets in bind groups MUST be multiples of 256
+        const ghosts = dataContract.descriptor.requirements.ghostCells;
+        const cellsPerFaceRaw = (maxNx + 2 * ghosts) * (maxNy + 2 * ghosts) * (grid.config.dimensions.nz > 1 ? (maxNz + 2 * ghosts) : 1);
+
+        // WebGPU Alignment: Storage buffer offsets must be multiples of 256 bytes.
         const bytesPerFaceRaw = cellsPerFaceRaw * 4;
         const bytesPerFaceAligned = Math.ceil(bytesPerFaceRaw / 256) * 256;
         this.strideFace = bytesPerFaceAligned / 4;
 
         const facesPerChunk = faceMappings.reduce((acc, f) => acc + (f.isPingPong ? 2 : 1), 0);
-        // Standard Neo Slot Allocation:
-        // 0-17: f0..f8 (Ping-Pong)
-        // 18: obstacles
-        // 19: vx
-        // 20: vy
-        // 21: vorticity
-        // 22: smoke
-        // We ensure at least 23 slots for NeoAero.wgsl compatibility, but allow more if needed.
-        this.totalSlotsPerChunk = Math.max(facesPerChunk, 23);
+        this.totalSlotsPerChunk = facesPerChunk;
 
         this.byteLength = grid.chunks.length * this.totalSlotsPerChunk * bytesPerFaceAligned;
 
@@ -166,7 +164,7 @@ export class MasterBuffer implements IMasterBuffer {
         return views;
     }
 
-    public setFaceData(chunkId: string, faceName: string, data: Float32Array | number[]): void {
+    public setFaceData(chunkId: string, faceName: string, data: Float32Array | number[], fillAllPingPong: boolean = false): void {
         const views = this.getChunkViews(chunkId);
         const dataContract = (this.vGrid as any).dataContract as DataContract;
         const descriptor = dataContract.descriptor;
@@ -177,15 +175,46 @@ export class MasterBuffer implements IMasterBuffer {
             return;
         }
 
-        // Determine actual index in the faceViews array (accounting for ping-pong)
         const faceMappings = dataContract.getFaceMappings();
         let bufIdx = 0;
         for (let i = 0; i < faceIdx; i++) {
             bufIdx += faceMappings[i].isPingPong ? 2 : 1;
         }
 
-        // We target the current 'read' buffer for initial topology setup
         views.faces[bufIdx].set(data as any);
-        console.log(`MasterBuffer: Painted ${data.length} cells into face '${faceName}' of chunk '${chunkId}'.`);
+        if (fillAllPingPong && faceMappings[faceIdx].isPingPong) {
+            views.faces[bufIdx + 1].set(data as any);
+        }
+    }
+
+    /**
+     * Initialize all cell populations to equilibrium (rho=1.0, u=0.0).
+     * Prevents NaN when compute pass reads ghost cells before first sync.
+     */
+    public initializeEquilibrium(): void {
+        const w = [4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36];
+        const dataContract = (this.vGrid as any).dataContract as DataContract;
+        const faceMappings = dataContract.getFaceMappings();
+
+        for (const chunk of this.vGrid.chunks) {
+            const views = this.getChunkViews(chunk.id);
+            for (let d = 0; d < 9; d++) {
+                const faceName = `f${d}`;
+                const faceIdx = faceMappings.findIndex(m => m.name === faceName);
+                if (faceIdx === -1) continue;
+
+                let bufIdx = 0;
+                for (let i = 0; i < faceIdx; i++) {
+                    bufIdx += faceMappings[i].isPingPong ? 2 : 1;
+                }
+
+                const faceView = views.faces[bufIdx];
+                faceView.fill(w[d]);
+                if (faceMappings[faceIdx].isPingPong) {
+                    views.faces[bufIdx + 1].fill(w[d]);
+                }
+            }
+        }
+        console.log("MasterBuffer: Initialized all LBM faces to equilibrium (rho=1.0).");
     }
 }
