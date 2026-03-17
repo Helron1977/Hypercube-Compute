@@ -94,7 +94,7 @@ export class MapConstructor implements IMapConstructor {
 
         // If not internal, it's a world boundary.
         // We use the global boundaries or fallback to 'wall' if not defined.
-        const boundarySide = globalBoundaries[face] || globalBoundaries.all || { role: 'wall' };
+        const boundarySide = (globalBoundaries && (globalBoundaries[face] || globalBoundaries.all)) || { role: 'wall' };
         let role = boundarySide.role;
         let periodicNeighborId: string | undefined;
 

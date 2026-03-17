@@ -6,7 +6,7 @@ import { HypercubeNeoFactory } from '../core/HypercubeNeoFactory';
 describe('Showcase Heatmap Initialization', () => {
     it('should successfully build the showcase-heatmap manifest without undefined errors', async () => {
         // Read manifest from disk
-        const manifestPath = path.resolve(__dirname, '../showcase/showcase-heat-gpu.json');
+        const manifestPath = path.resolve(__dirname, '../showcase/heat/gpu/heat-gpu.json');
         const content = fs.readFileSync(manifestPath, 'utf8');
         const manifest = JSON.parse(content);
 

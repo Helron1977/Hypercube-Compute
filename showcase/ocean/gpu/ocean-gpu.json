@@ -1,5 +1,5 @@
 {
-    "$schema": "https://hypercube-neo.dev/schema/v4.json",
+    "$schema": "../../../manifest-schema.json",
     "name": "Ocean Showcase 02 GPU - 2.5D Isometric Wave Equation",
     "version": "1.0.0",
     "engine": {

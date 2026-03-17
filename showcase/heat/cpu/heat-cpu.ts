@@ -1,9 +1,9 @@
-import { HypercubeNeoFactory } from '../core/HypercubeNeoFactory';
-import { CanvasAdapterNeo } from '../io/CanvasAdapterNeo';
-import { BenchmarkHUD } from '../io/BenchmarkHUD';
+import { HypercubeNeoFactory } from '../../../core/HypercubeNeoFactory';
+import { CanvasAdapterNeo } from '../../../io/CanvasAdapterNeo';
+import { BenchmarkHUD } from '../../../io/BenchmarkHUD';
 
 async function main() {
-    const resManifest = await fetch('./showcase-heat-cpu.json?v=' + Date.now());
+    const resManifest = await fetch('./heat-cpu.json?v=' + Date.now());
     const manifest = await resManifest.json();
 
     const factory = new HypercubeNeoFactory();

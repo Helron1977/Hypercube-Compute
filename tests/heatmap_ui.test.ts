@@ -9,7 +9,7 @@ describe('Showcase Heatmap UI & Rendering Logic', () => {
     let manifest: any;
 
     beforeEach(async () => {
-        const manifestPath = path.resolve(__dirname, '../showcase/showcase-heat-gpu.json');
+        const manifestPath = path.resolve(__dirname, '../showcase/heat/gpu/heat-gpu.json');
         const content = fs.readFileSync(manifestPath, 'utf8');
         manifest = JSON.parse(content);
 

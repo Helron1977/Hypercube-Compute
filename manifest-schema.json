@@ -1,32 +1,35 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Hypercube Neo Manifest",
+    "title": "Hypercube Neo Manifest V4",
     "description": "Declarative configuration for the Hypercube Neo Spatial Computing Engine",
     "type": "object",
     "required": [
+        "name",
         "engine",
-        "config",
-        "visualProfile"
+        "config"
     ],
     "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "name": {
+            "type": "string"
+        },
+        "version": {
+            "type": "string"
+        },
         "engine": {
             "type": "object",
             "required": [
-                "type"
+                "faces",
+                "rules"
             ],
             "properties": {
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "neo-aero-v1",
-                        "neo-ocean-v1",
-                        "neo-thermal-v3",
-                        "neo-sdf"
-                    ]
+                "name": {
+                    "type": "string"
                 },
-                "params": {
-                    "type": "object",
-                    "additionalProperties": true
+                "version": {
+                    "type": "string"
                 },
                 "faces": {
                     "type": "array",
@@ -34,21 +37,77 @@
                         "type": "object",
                         "required": [
                             "name",
-                            "isPingPong"
+                            "type"
                         ],
                         "properties": {
                             "name": {
                                 "type": "string"
                             },
-                            "isPingPong": {
-                                "type": "boolean"
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "scalar",
+                                    "vector",
+                                    "mask",
+                                    "factor",
+                                    "tensor"
+                                ]
                             },
                             "isSynchronized": {
-                                "type": "boolean",
-                                "default": true
+                                "type": "boolean"
+                            },
+                            "isPersistent": {
+                                "type": "boolean"
+                            },
+                            "isReadOnly": {
+                                "type": "boolean"
+                            },
+                            "isPingPong": {
+                                "type": "boolean"
                             }
                         }
                     }
+                },
+                "rules": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "type"
+                        ],
+                        "properties": {
+                            "type": {
+                                "type": "string"
+                            },
+                            "method": {
+                                "type": "string"
+                            },
+                            "source": {
+                                "type": "string"
+                            },
+                            "params": {
+                                "type": "object",
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "requirements": {
+                    "type": "object",
+                    "properties": {
+                        "ghostCells": {
+                            "type": "integer"
+                        },
+                        "pingPong": {
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "parameters": {
+                    "type": "object"
+                },
+                "outputs": {
+                    "type": "array"
                 }
             }
         },
@@ -59,15 +118,6 @@
                 "chunks"
             ],
             "properties": {
-                "mode": {
-                    "type": "string",
-                    "enum": [
-                        "cpu",
-                        "gpu",
-                        "auto"
-                    ],
-                    "default": "auto"
-                },
                 "dimensions": {
                     "type": "object",
                     "required": [
@@ -98,28 +148,113 @@
                     ],
                     "properties": {
                         "x": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "y": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
-                }
-            }
-        },
-        "visualProfile": {
-            "type": "object",
-            "properties": {
-                "colormap": {
-                    "type": "string"
                 },
-                "range": {
+                "params": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "boundaries": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "role": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "cpu",
+                        "gpu",
+                        "auto"
+                    ],
+                    "default": "auto"
+                },
+                "executionMode": {
+                    "type": "string",
+                    "enum": [
+                        "serial",
+                        "parallel"
+                    ],
+                    "default": "parallel"
+                },
+                "objects": {
                     "type": "array",
                     "items": {
-                        "type": "number"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                        "type": "object",
+                        "required": [
+                            "id",
+                            "type",
+                            "position"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string",
+                                "enum": [
+                                    "rect",
+                                    "circle",
+                                    "polygon"
+                                ]
+                            },
+                            "position": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {
+                                        "type": "number"
+                                    },
+                                    "y": {
+                                        "type": "number"
+                                    }
+                                }
+                            },
+                            "dimensions": {
+                                "type": "object",
+                                "properties": {
+                                    "w": {
+                                        "type": "number"
+                                    },
+                                    "h": {
+                                        "type": "number"
+                                    }
+                                }
+                            },
+                            "points": {
+                                "type": "array"
+                            },
+                            "properties": {
+                                "type": "object",
+                                "additionalProperties": true
+                            },
+                            "rasterMode": {
+                                "type": "string",
+                                "enum": [
+                                    "replace",
+                                    "add",
+                                    "multiply"
+                                ]
+                            },
+                            "isVisible": {
+                                "type": "boolean"
+                            },
+                            "isBaked": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,10 +1,36 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Hypercube Neo - Aero CPU</title>
+    <title>Aero-Fluidics_CPU</title>
+    <link rel="stylesheet" href="../../assets/showcase.css">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050f23;
+            color: #fff;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1a0a16 0%, #050f23 100%);
+        }
+        canvas {
+            max-width: 98vw;
+            max-height: 98vh;
+            border-radius: 4px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), 0 0 2px rgba(255, 255, 255, 0.1);
+        }
+    </style>
 </head>
 <body>
+    <div id="canvas-container"></div>
+    <a href="../../index.html" class="hub-button">Back to Hub</a>
     <script type="module" src="./aero-cpu.ts"></script>
 </body>
 </html>

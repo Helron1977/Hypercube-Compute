@@ -1,5 +1,5 @@
 {
-    "$schema": "https://hypercube-neo.dev/schema/v4.json",
+    "$schema": "../../../manifest-schema.json",
     "name": "Aerodynamics Showcase 01 - Biplane NACA0016 + Bluff Body",
     "version": "1.0.0",
     "engine": {

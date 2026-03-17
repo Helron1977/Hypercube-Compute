@@ -1,16 +1,16 @@
-import { HypercubeNeoFactory } from '../core/HypercubeNeoFactory';
-import { WebGpuRendererNeo } from '../io/WebGpuRendererNeo';
-import { BenchmarkHUD } from '../io/BenchmarkHUD';
+import { HypercubeNeoFactory } from '../../../core/HypercubeNeoFactory';
+import { WebGpuRendererNeo } from '../../../io/WebGpuRendererNeo';
+import { BenchmarkHUD } from '../../../io/BenchmarkHUD';
 
 async function main() {
-    const resManifest = await fetch('./showcase-heat-gpu.json?v=' + Date.now());
+    const resManifest = await fetch('./heat-gpu.json?v=' + Date.now());
     const manifest = await resManifest.json();
 
     const factory = new HypercubeNeoFactory();
     const engine = await factory.build(manifest.config, manifest.engine);
 
     // IA Observability (Web MCP)
-    const { DebugBridge } = await import('../helpers/DebugBridge');
+    const { DebugBridge } = await import('../../../helpers/DebugBridge');
     DebugBridge.setup(engine, manifest.config);
 
     // Resolve stable logical face indices (do NOT use getFaceIndices().read here,

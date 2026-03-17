@@ -1,6 +1,6 @@
-import { HypercubeNeoFactory } from '../../../../core/HypercubeNeoFactory';
-import { WebGpuIsoRendererNeo } from '../../io/WebGpuIsoRendererNeo';
-import { BenchmarkHUD } from '../../io/BenchmarkHUD';
+import { HypercubeNeoFactory } from '../../../core/HypercubeNeoFactory';
+import { WebGpuIsoRendererNeo } from '../../../io/WebGpuIsoRendererNeo';
+import { BenchmarkHUD } from '../../../io/BenchmarkHUD';
 
 /**
  * Neo Ocean (GPU) Orchestrator
@@ -10,14 +10,14 @@ async function main() {
     const factory = new HypercubeNeoFactory();
 
     // 1. Load Manifest from local showcase root
-    const manifest = await factory.fromManifest('../showcase-ocean-gpu.json');
+    const manifest = await factory.fromManifest('./ocean-gpu.json');
     const { config, engine: descriptor } = manifest;
 
     // 2. Build Engine
     const engine = await factory.build(config, descriptor);
 
     // IA Observability (Web MCP)
-    const { DebugBridge } = await import('../../helpers/DebugBridge');
+    const { DebugBridge } = await import('../../../helpers/DebugBridge');
     DebugBridge.setup(engine, config);
 
     const NX = config.dimensions.nx;

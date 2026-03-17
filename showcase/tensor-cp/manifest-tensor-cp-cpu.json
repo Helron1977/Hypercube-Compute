@@ -1,4 +1,5 @@
 {
+  "$schema": "../../manifest-schema.json",
   "name": "Tensor CP/ALS Explorer (CPU)",
   "version": "1.0",
   "engine": {

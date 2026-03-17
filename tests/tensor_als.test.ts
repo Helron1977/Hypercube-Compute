@@ -21,7 +21,8 @@ describe('NeoTensorKernel (ALS)', () => {
             params: { rank, regularization: 0.001 }
         };
 
-        const views = [mode_a, mode_b, mode_c, target];
+        const recon = new Float32Array(nx * ny * nz).fill(0);
+        const views = [mode_a, mode_b, mode_c, target, recon];
 
         // Run many iterations
         for (let i = 0; i < 500; i++) {

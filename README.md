@@ -65,12 +65,29 @@ loop();
 
 ---
 
-## 📚 Documentation & Guides
+## 🚀 Showcases & Use Cases
 
-- **[Declarative Architecture Guide](./docs/declarative-architecture.md)**: Deep dive into the V8/Neo manifest system.
-- **[Aero Guide](./docs/showcase-aero.md)**: Master LBM Aerodynamics and viscosity tuning.
-- **[Ocean Guide](./docs/showcase-ocean.md)**: Learn 2.5D Shallow Water equations and bio-advection.
-- **[SDF Spatial Engine](./docs/showcase-sdf.md)**: $O(log N)$ Euclidean Distance Fields via Jump Flooding.
+Hypercube Neo features several high-performance simulations accessible via the [Showcase Hub](showcase/index.html).
+
+### 🌬️ Aerodynamics (LBM)
+Simulate high-fidelity airflows over complex geometries using the Lattice Boltzmann Method.
+- **[Aero CPU](showcase/aero/cpu/aero-cpu.html)** | **[Aero GPU](showcase/aero/gpu/aero-gpu.html)**
+
+### 🌡️ Thermal Diffusion
+Compute multi-dimensional heat transport with interactive obstacle handling.
+- **[Heat CPU](showcase/heat/cpu/heat-cpu.html)** | **[Heat GPU](showcase/heat/gpu/heat-gpu.html)**
+
+### 🧮 Tensor-CP Decomposition (NEW)
+Decompose 3D data tensors using the Alternating Least Squares (ALS) algorithm.
+- **[Tensor-CP Dashboard](showcase/tensor-cp/index.html)**
+
+### 📐 Spatial SDF (Jump Flooding)
+Generate Signed Distance Fields in $O(\log N)$ time for complex environments.
+- **[SDF CPU](showcase/sdf/cpu/sdf-cpu.html)** | **[SDF GPU](showcase/sdf/gpu/sdf-gpu.html)**
+
+### 🧬 Cellular Automata
+Massively parallel implementation of Conway's Game of Life.
+- **[Life CPU](showcase/life/cpu/life-cpu.html)** | **[Life GPU](showcase/life/gpu/life-gpu.html)**
 
 ---
 

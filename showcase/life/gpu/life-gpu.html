@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Hypercube Neo - Ocean CPU</title>
-    <link rel="stylesheet" href="../assets/showcase.css">
+    <title>Hypercube Neo - Life GPU</title>
+    <link rel="stylesheet" href="../../assets/showcase.css">
     <style>
         body {
             margin: 0;
@@ -12,7 +12,6 @@
             color: #fff;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
-
         #canvas-container {
             width: 100vw;
             height: 100vh;
@@ -21,15 +20,12 @@
             justify-content: center;
             background: radial-gradient(circle at center, #1a0a16 0%, #050f23 100%);
         }
-
         canvas {
             max-width: 98vw;
             max-height: 98vh;
             border-radius: 4px;
             box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), 0 0 2px rgba(255, 255, 255, 0.1);
         }
-
-        /* Premium Hub Button */
         .hub-button {
             position: fixed !important;
             top: 20px !important;
@@ -53,35 +49,11 @@
             border-color: #00f2ff !important;
             box-shadow: 0 0 20px rgba(0, 242, 255, 0.3) !important;
         }
-
-        #instructions {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            pointer-events: none;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px 20px;
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #a0aec0;
-            font-size: 0.85rem;
-            letter-spacing: 0.5px;
-            backdrop-filter: blur(5px);
-        }
     </style>
 </head>
-
 <body>
     <div id="canvas-container"></div>
-    
-    <a href="../index.html" class="hub-button">Back to Hub</a>
-
-    <div id="instructions">
-        <span>🌊 Click & drag to generate ocean waves & bio-luminescence (CPU)</span>
-    </div>
-
-    <script type="module" src="./ocean.ts"></script>
+    <a href="../../index.html" class="hub-button">Back to Hub</a>
+    <script type="module" src="./life-gpu.ts"></script>
 </body>
 </html>

@@ -1,147 +1,270 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hypercube Neo - Showcase Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #020617;
-            --accent: #38bdf8;
-            --surface: #0f172a;
-            --text-muted: #94a3b8;
+            --bg-dark: #050a14;
+            --accent: #00f2ff;
+            --surface: #0a1428;
+            --text-muted: #64748b;
+            --grid-line: rgba(0, 242, 255, 0.05);
         }
+        
         body {
             background: var(--bg-dark);
             color: white;
-            font-family: 'Outfit', 'Inter', sans-serif;
+            font-family: 'Outfit', sans-serif;
             margin: 0;
-            padding: 2rem;
+            padding: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
+            min-height: 100vh;
+            /* Blueprint Grid Effect */
+            background-image: 
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+                radial-gradient(circle at 50% 50%, #102040 0%, var(--bg-dark) 100%);
+            background-size: 40px 40px, 40px 40px, 100% 100%;
         }
-        header { text-align: center; margin-bottom: 3rem; }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            max-width: 1200px;
+
+        header {
             width: 100%;
-        }
-        .card {
-            background: var(--surface);
-            border-radius: 1.5rem;
-            padding: 2rem;
-            border: 1px solid rgba(255,255,255,0.05);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 4rem 2rem;
+            text-align: center;
+            border-bottom: 1px solid rgba(0, 242, 255, 0.1);
+            background: rgba(5, 10, 20, 0.8);
+            backdrop-filter: blur(10px);
             position: relative;
             overflow: hidden;
         }
-        .card:hover {
-            transform: translateY(-8px);
-            border-color: var(--accent);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+
+        /* Geometric Logo Motif */
+        .logo-box {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 1.5rem;
+            position: relative;
+            border: 1px solid var(--accent);
+            transform: rotateX(45deg) rotateZ(45deg);
         }
-        .card h3 { margin: 0 0 0.5rem 0; font-size: 1.5rem; color: var(--accent); }
-        .card p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; margin-bottom: 2rem; }
-        .links { display: flex; gap: 1rem; position: absolute; bottom: 2rem; left: 2rem; width: calc(100% - 4rem); }
+        .logo-box::before {
+            content: '';
+            position: absolute;
+            inset: -10px;
+            border: 1px solid rgba(0, 242, 255, 0.3);
+            transform: translateZ(-20px);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 300;
+            letter-spacing: 0.5rem;
+            text-transform: uppercase;
+            color: white;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            margin-top: 1rem;
+            letter-spacing: 2px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 3rem;
+            max-width: 1200px;
+            width: 100%;
+            padding: 4rem 2rem;
+            box-sizing: border-box;
+        }
+
+        .card {
+            background: rgba(10, 20, 40, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 2.5rem;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+            clip-path: polygon(0 0, 100% 0, 100% 85%, 85% 100%, 0 100%);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0;
+            transition: 0.4s;
+        }
+
+        .card:hover {
+            transform: translateZ(20px) scale(1.02);
+            border-color: rgba(0, 242, 255, 0.3);
+            background: rgba(16, 32, 64, 0.8);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+        }
+
+        .card:hover::before { opacity: 1; }
+
+        .card h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1.2rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+
+        .card p {
+            color: #cbd5e1;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 3rem;
+            font-weight: 300;
+        }
+
+        .links {
+            display: flex;
+            gap: 1px;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            left: 0;
+            background: rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+
         .btn {
             flex: 1;
-            text-align: center;
-            padding: 0.6rem;
-            border-radius: 0.75rem;
+            padding: 0.8rem 0.4rem;
             text-decoration: none;
-            font-weight: 600;
-            font-size: 0.85rem;
-            transition: 0.2s;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+            transition: 0.3s;
+            background: var(--surface);
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .btn-cpu { background: rgba(56, 189, 248, 0.1); color: var(--accent); border: 1px solid var(--accent); }
-        .btn-gpu { background: var(--accent); color: var(--bg-dark); }
-        .btn:hover { filter: brightness(1.2); }
-        
+
+        .btn:hover {
+            background: var(--accent);
+            color: var(--bg-dark);
+        }
+
         .tag {
             position: absolute;
-            top: 1.5rem;
+            top: 1rem;
             right: 1.5rem;
-            background: rgba(16, 185, 129, 0.1);
-            color: #10b981;
-            padding: 0.25rem 0.75rem;
-            border-radius: 1rem;
-            font-size: 0.75rem;
-            font-weight: bold;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+        }
+
+        /* Perspective motif on card backgrounds */
+        .card-bg-motif {
+            position: absolute;
+            bottom: 2rem;
+            right: 2rem;
+            width: 80px;
+            height: 80px;
+            border-right: 1px solid rgba(0, 242, 255, 0.05);
+            border-bottom: 1px solid rgba(0, 242, 255, 0.05);
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
     <header>
-        <h1>Hypercube Neo Showcase 🌊🛸</h1>
-        <p style="color:var(--text-muted)">High-Performance Spatial Computing & Physical Simulations</p>
+        <div class="logo-box"></div>
+        <h1>Hypercube Neo</h1>
+        <p>[ SPATIAL COMPUTE ENGINE v4.0 ]</p>
     </header>
 
     <div class="grid">
         <!-- Aero -->
         <div class="card">
-            <span class="tag">Physics</span>
-            <h3>Aerodynamics Port</h3>
-            <p>2D Lattice Boltzmann simulation for high-fidelity airflow visualization over complex airfoils.</p>
+            <span class="tag">01.PHYSICS</span>
+            <h3>Aero-Fluidics</h3>
+            <p>Lattice Boltzmann manifold simulation. High-fidelity airflow dynamics over architectural topologies.</p>
+            <div class="card-bg-motif"></div>
             <div class="links">
-                <a href="aero/cpu/aero-cpu.html" class="btn btn-cpu">CPU</a>
-                <a href="aero/gpu/aero-gpu.html" class="btn btn-gpu">WebGPU</a>
+                <a href="aero/cpu/aero-cpu.html" class="btn">CPU_L1</a>
+                <a href="aero/gpu/aero-gpu.html" class="btn">GPU_ACCEL</a>
             </div>
         </div>
 
         <!-- Heat -->
         <div class="card">
-            <span class="tag">Physics</span>
-            <h3>Thermal Diffusion</h3>
-            <p>Interactive heatmap simulation showing diffusive energy transport across 2D/3D topologies.</p>
+            <span class="tag">02.PHYSICS</span>
+            <h3>Entropy Transfer</h3>
+            <p>Thermal diffusion vectors across n-dimensional fields. Real-time entropic transport analysis.</p>
+            <div class="card-bg-motif"></div>
             <div class="links">
-                <a href="heat/cpu/heat-cpu.html" class="btn btn-cpu">CPU</a>
-                <a href="heat/gpu/heat-gpu.html" class="btn btn-gpu">WebGPU</a>
+                <a href="heat/cpu/heat-cpu.html" class="btn">CPU_L1</a>
+                <a href="heat/gpu/heat-gpu.html" class="btn">GPU_ACCEL</a>
             </div>
         </div>
 
         <!-- Tensor-CP -->
         <div class="card">
-            <span class="tag">Computing</span>
-            <h3>Tensor-CP Explorer</h3>
-            <p>Decomposition of 3D tensors (Users x Movies x Ratings) via ALS with live reconstruction error tracking.</p>
+            <span class="tag">03.ALGEBRA</span>
+            <h3>Tensor Decomposition</h3>
+            <p>Multi-way latent factor analysis. High-rank tensor reconstruction via Adaptive Least Squares.</p>
+            <div class="card-bg-motif"></div>
             <div class="links">
-                <a href="tensor-cp/cpu/tensor-cp.html" class="btn btn-cpu">CPU</a>
-                <a href="tensor-cp/index.html" class="btn btn-gpu">Dashboard</a>
+                <a href="tensor-cp/cpu/tensor-cp.html" class="btn">Direct Launch</a>
+                <a href="tensor-cp/index.html" class="btn">Data Explorer</a>
             </div>
         </div>
 
         <!-- SDF -->
         <div class="card">
-            <span class="tag">Geometry</span>
-            <h3>Spatial SDF Engine</h3>
-            <p>Real-time Signed Distance Field generation using Jump Flooding Algorithm ($O(\log N)$ complexity).</p>
+            <span class="tag">04.GEOMETRY</span>
+            <h3>SDF Field Generator</h3>
+            <p>Spatial Signed Distance Fields. O(log N) geometric field transformation via Jump Flooding.</p>
+            <div class="card-bg-motif"></div>
             <div class="links">
-                <a href="sdf/cpu/sdf-cpu.html" class="btn btn-cpu">CPU</a>
-                <a href="sdf/gpu/sdf-gpu.html" class="btn btn-gpu">WebGPU</a>
+                <a href="sdf/cpu/sdf-cpu.html" class="btn">CPU_CORE</a>
+                <a href="sdf/gpu/sdf-gpu.html" class="btn">GPU_ACCEL</a>
             </div>
         </div>
 
         <!-- Life -->
         <div class="card">
-            <span class="tag">Cellular</span>
-            <h3>Game of Life</h3>
-            <p>Massively parallel implementation of Conway's Game of Life on non-standard topologies.</p>
+            <span class="tag">05.AUTOMATA</span>
+            <h3>Spatial Automata</h3>
+            <p>Conway-based cellular evolution on non-standard grid manifolds. Massively parallel state propagation.</p>
+            <div class="card-bg-motif"></div>
             <div class="links">
-                <a href="life/cpu/life-cpu.html" class="btn btn-cpu">CPU</a>
-                <a href="life/gpu/life-gpu.html" class="btn btn-gpu">WebGPU</a>
+                <a href="life/cpu/life-cpu.html" class="btn">CPU_CORE</a>
+                <a href="life/gpu/life-gpu.html" class="btn">GPU_ACCEL</a>
             </div>
         </div>
 
         <!-- Ocean -->
         <div class="card">
-            <span class="tag">Physics</span>
-            <h3>Ocean bio-advection</h3>
-            <p>Shallow water equations and bio-advection on GPU. High-performance vorticity tracking.</p>
+            <span class="tag">06.PHYSICS</span>
+            <h3>Ocean Dynamics</h3>
+            <p>Shallow water wave equations combined with biological advection. Vorticity tracking on discrete grids.</p>
+            <div class="card-bg-motif"></div>
             <div class="links">
-                <a href="ocean/gpu/ocean-gpu.html" class="btn btn-gpu" style="width:100%">WebGPU ONLY</a>
+                <a href="ocean/cpu/ocean-cpu.html" class="btn">CPU_CORE</a>
+                <a href="ocean/gpu/ocean-gpu.html" class="btn">GPU_ACCEL</a>
             </div>
         </div>
     </div>

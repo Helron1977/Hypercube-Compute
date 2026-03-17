@@ -86,11 +86,17 @@ export class CanvasAdapterNeo {
 
         // Pre-calculate max dimensions for correct stride logic
         let maxNx = 0;
+        let maxNy = 0;
         for (const c of neo.vGrid.chunks) {
             maxNx = Math.max(maxNx, c.localDimensions.nx);
+            maxNy = Math.max(maxNy, c.localDimensions.ny);
         }
         const padding = descriptor.requirements.ghostCells;
         const nxPhys = maxNx + 2 * padding;
+        const nyPhys = maxNy + 2 * padding;
+        const totalNz = dims.nz || 1;
+        const sliceZ = Math.max(0, Math.min(totalNz - 1, options.sliceZ ?? 0));
+        const lz = sliceZ + padding;
 
         // Iterate through chunks and "tile" them into the global imageData
         for (const chunk of neo.vGrid.chunks) {
@@ -127,10 +133,14 @@ export class CanvasAdapterNeo {
             const nx = chunk.localDimensions.nx;
             const ny = chunk.localDimensions.ny;
 
+            // 3D Stride Logic
+            const nxPhysNyPhys = nxPhys * (maxNy + 2 * padding);
+            const sliceOffset = totalNz > 1 ? lz * nxPhysNyPhys : 0;
+
             for (let ly = padding; ly < ny + padding; ly++) {
                 const worldY = worldYOffset + (ly - padding);
                 const dstRowOffset = worldY * totalW;
-                const srcRowOffset = ly * nxPhys;
+                const srcRowOffset = sliceOffset + ly * nxPhys;
 
                 coloringCtx.worldY = worldY;
 

@@ -3,99 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hypercube Neo - Tensor-CP ALS Explorer</title>
+    <title>Hypercube Neo - Tensor Decomposition</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/showcase.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg-dark: #0f172a;
-            --accent: #38bdf8;
-            --surface: #1e293b;
-            --text: #f8fafc;
+            --bg-dark: #050a14;
+            --accent: #00f2ff;
+            --surface: #0a1428;
+            --text: #cbd5e1;
+            --border-dim: rgba(0, 242, 255, 0.1);
         }
         body {
             background: var(--bg-dark);
             color: var(--text);
-            font-family: 'Inter', system-ui, sans-serif;
+            font-family: 'Inter', sans-serif;
             margin: 0;
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            background-image: radial-gradient(circle at 50% 50%, #102040 0%, var(--bg-dark) 100%);
         }
         header {
-            padding: 2rem;
+            padding: 3rem 1rem;
             text-align: center;
-            background: rgba(30, 41, 59, 0.5);
+            background: rgba(5, 10, 20, 0.8);
             backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid var(--border-dim);
+        }
+        header h1 {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 400;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            font-size: 1.5rem;
+            margin: 0;
+        }
+        header p {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 0.5rem;
         }
         .container {
-            max-width: 1200px;
-            margin: 2rem auto;
+            max-width: 1100px;
+            margin: 3rem auto;
             display: grid;
-            grid-template-columns: 350px 1fr;
+            grid-template-columns: 320px 1fr;
             gap: 2rem;
             padding: 0 1rem;
         }
         .panel {
-            background: var(--surface);
-            padding: 1.5rem;
-            border-radius: 1rem;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            background: rgba(10, 20, 40, 0.6);
+            padding: 2rem;
+            border: 1px solid var(--border-dim);
+            clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
+        }
+        .panel h3 {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-top: 0;
+            letter-spacing: 1px;
         }
         .controls label {
             display: block;
             margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-            color: #94a3b8;
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: #64748b;
+            text-transform: uppercase;
         }
         .controls input, .controls select {
             width: 100%;
             padding: 0.75rem;
-            background: #0f172a;
-            border: 1px solid #334155;
+            background: #050a14;
+            border: 1px solid var(--border-dim);
             color: white;
-            border-radius: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
             margin-bottom: 1.5rem;
+            box-sizing: border-box;
         }
         .btn {
-            background: var(--accent);
-            color: #0f172a;
-            border: none;
+            background: var(--surface);
+            color: white;
+            border: 1px solid var(--border-dim);
             padding: 1rem;
             width: 100%;
-            border-radius: 0.5rem;
-            font-weight: bold;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s;
             margin-bottom: 1rem;
         }
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);
+            background: var(--accent);
+            color: #050a14;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
         }
-        .secondary {
+        .btn.secondary {
             background: transparent;
-            border: 1px solid var(--accent);
+            border: 1px solid var(--border-dim);
             color: var(--accent);
         }
         .visuals canvas {
-            background: #0f172a;
-            border-radius: 1rem;
+            background: #000;
+            border: 1px solid rgba(255,255,255,0.05);
             width: 100% !important;
-            height: 400px !important;
+            height: 350px !important;
         }
         #stats {
             margin-top: 1rem;
-            font-family: monospace;
-            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
             color: #10b981;
         }
     </style>
 </head>
 <body>
     <header>
-        <h1>Tensor-CP ALS Explorer 🧮</h1>
-        <p>Decomposition of 3D Tensors via Hypercube Neo Engine</p>
+        <a href="../index.html" class="hub-button">Back to Hub</a>
+        <h1>Tensor Field Decomposition</h1>
+        <p>[ High-rank multi-linear algebra core ]</p>
     </header>
 
     <div class="container">

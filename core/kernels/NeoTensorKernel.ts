@@ -12,7 +12,8 @@ export class NeoTensorKernel implements IKernel {
             mode_a: 'factor', // [n_users x rank]
             mode_b: 'factor', // [n_films x rank]
             mode_c: 'factor', // [n_genres x rank]
-            target: 'tensor'  // [n_users x n_films x n_genres]
+            target: 'tensor',  // [n_users x n_films x n_genres]
+            reconstruction: 'tensor' // [n_users x n_films x n_genres]
         }
     };
 
@@ -29,33 +30,32 @@ export class NeoTensorKernel implements IKernel {
         const mode_b = views[1];
         const mode_c = views[2];
         const target = views[3];
+        const recon = views[4];
 
-        // ALS Update Logic (Simplified for the first version)
-        // We perform a local least-squares update step for each slice.
-        // In a real ALS, we solve (B_kr_C)^T * (B_kr_C) * A = (B_kr_C)^T * X
-        
-        // This kernel is executed per-chunk. 
-        // For simplicity in Phase 12, we implement a gradient-based update 
-        // which is mathematically equivalent to one small step of the solve.
-        
         for (let k = 0; k < nz; k++) {
             for (let j = 0; j < ny; j++) {
                 for (let i = 0; i < nx; i++) {
                     const idx = i + j * nx + k * nx * ny;
                     const val = target[idx];
-                    if (val === 0) continue; // Sparse handling
 
                     // Current reconstruction: sum_{r=0}^{rank-1} a[i,r] * b[j,r] * c[k,r]
+                    let pred = 0;
+                    for (let r = 0; r < rank; r++) {
+                        pred += mode_a[i * rank + r] * mode_b[j * rank + r] * mode_c[k * rank + r];
+                    }
+                    
+                    // Store reconstruction for visualization
+                    if (recon) recon[idx] = pred;
+
+                    if (val === 0) continue; // Sparse handling
+
                     for (let r = 0; r < rank; r++) {
                         const idxA = i * rank + r;
                         const idxB = j * rank + r;
                         const idxC = k * rank + r;
 
-                        const pred = mode_a[idxA] * mode_b[idxB] * mode_c[idxC];
                         const err = val - pred;
 
-                        // Gradient update step (Stochastic-like ALS)
-                        // This allows zero-allocation and local computation.
                         const lr = 0.01;
                         mode_a[idxA] += lr * (err * mode_b[idxB] * mode_c[idxC] - reg * mode_a[idxA]);
                         mode_b[idxB] += lr * (err * mode_a[idxA] * mode_c[idxC] - reg * mode_b[idxB]);

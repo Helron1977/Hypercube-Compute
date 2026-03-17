@@ -1,10 +1,10 @@
-import { HypercubeNeoFactory } from '../../../../core/HypercubeNeoFactory';
-import { HypercubeNeo } from '../../HypercubeNeo';
-import { BenchmarkHUD } from '../../io/BenchmarkHUD';
+import { HypercubeNeoFactory } from '../../../core/HypercubeNeoFactory';
+import { HypercubeNeo } from '../../../HypercubeNeo';
+import { BenchmarkHUD } from '../../../io/BenchmarkHUD';
 
 async function main() {
     const factory = new HypercubeNeoFactory();
-    const manifest = await factory.fromManifest('../showcase-life.json');
+    const manifest = await factory.fromManifest('../cpu/life-cpu.json');
     const { config, engine: descriptor } = manifest;
 
     // Force GPU mode

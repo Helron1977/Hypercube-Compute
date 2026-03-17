@@ -146,6 +146,16 @@ export class GpuDispatcher implements IDispatcher {
                 } else if (scheme.type === 'neo-ocean-v1') {
                     f32Data[base + 22] = (scheme.params?.bioDiffusion as number) ?? 0.001;
                     f32Data[base + 23] = (scheme.params?.bioGrowth as number) ?? 0.01;
+                } else if (scheme.type === 'neo-tensor-cp-v1') {
+                    f32Data[base + 22] = (scheme.params?.rank as number) ?? 3.0; // Rank
+                    f32Data[base + 23] = (scheme.params?.regularization as number) ?? 0.001; // Reg
+                    
+                    // Tensor specific face layout mapping
+                    u32Data[base + 31] = getIdx('mode_a', 'write');
+                    u32Data[base + 32] = getIdx('mode_b', 'write');
+                    u32Data[base + 33] = getIdx('mode_c', 'write');
+                    u32Data[base + 34] = getIdx('target', 'read');
+                    u32Data[base + 35] = getIdx('reconstruction', 'write');
                 }
 
                 const topo = this.topologyResolver.resolve(vChunk, this.vGrid.chunkLayout, grid.config.boundaries);

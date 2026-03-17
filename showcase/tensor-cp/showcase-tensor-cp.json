@@ -1,0 +1,42 @@
+{
+    "$schema": "../../manifest-schema.json",
+    "name": "Tensor CP Showcase",
+    "engine": {
+        "type": "neo-tensor-cp-v1",
+        "params": {
+            "rank": 10,
+            "maxIter": 100,
+            "tolerance": 1e-4
+        },
+        "faces": [
+            { "name": "mode_a", "type": "factor", "isPingPong": false, "isSynchronized": true },
+            { "name": "mode_b", "type": "factor", "isPingPong": false, "isSynchronized": true },
+            { "name": "mode_c", "type": "factor", "isPingPong": false, "isSynchronized": true },
+            { "name": "target", "type": "tensor", "isPingPong": false, "isSynchronized": true },
+            { "name": "reconstruction", "type": "tensor", "isPingPong": false, "isSynchronized": true }
+        ],
+        "rules": [
+            { "type": "neo-tensor-cp-v1" }
+        ],
+        "requirements": {
+            "ghostCells": 0,
+            "pingPong": false
+        }
+    },
+    "config": {
+        "mode": "cpu",
+        "dimensions": { "nx": 10, "ny": 10, "nz": 10 },
+        "chunks": { "x": 1, "y": 1 },
+        "boundaries": {
+            "all": { "role": "wall" }
+        },
+        "params": {
+            "rank": 10,
+            "maxIterations": 100
+        }
+    },
+    "visualProfile": {
+        "colormap": "viridis",
+        "range": [-1, 1]
+    }
+}

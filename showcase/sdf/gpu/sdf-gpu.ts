@@ -1,7 +1,7 @@
-import { HypercubeNeoFactory } from '../core/HypercubeNeoFactory';
-import { CanvasAdapterNeo } from '../io/CanvasAdapterNeo';
-import { BenchmarkHUD } from '../io/BenchmarkHUD';
-import { WebGpuRendererNeo } from '../io/WebGpuRendererNeo';
+import { HypercubeNeoFactory } from '../../../core/HypercubeNeoFactory';
+import { CanvasAdapterNeo } from '../../../io/CanvasAdapterNeo';
+import { BenchmarkHUD } from '../../../io/BenchmarkHUD';
+import { WebGpuRendererNeo } from '../../../io/WebGpuRendererNeo';
 
 // Leaflet Global
 declare const L: any;
@@ -113,18 +113,18 @@ async function bootSDF() {
     map.on('zoom zoomend move moveend', syncCanvas);
     syncCanvas();
 
-    const resManifest = await fetch('./showcase-sdf-gpu.json?v=' + Date.now());
+    const resManifest = await fetch('./sdf-gpu.json?v=' + Date.now());
     const manifest = await resManifest.json();
 
     console.log("Loading Urban Data...");
-    const resData = await fetch('./assets/paris_data.json?v=' + Date.now());
+    const resData = await fetch('../../assets/paris_data.json?v=' + Date.now());
     const geoData: ParisData = await resData.json();
 
     const factory = new HypercubeNeoFactory();
     const engine = await factory.build(manifest.config, manifest.engine);
 
     // IA Observability (Web MCP)
-    const { DebugBridge } = await import('../helpers/DebugBridge');
+    const { DebugBridge } = await import('../../../helpers/DebugBridge');
     DebugBridge.setup(engine, manifest.config);
 
     console.log("Hypercube Neo GPU Engine initialized!");

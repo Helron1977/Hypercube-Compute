@@ -32,7 +32,7 @@ export class MasterBuffer implements IMasterBuffer {
             maxNz = Math.max(maxNz, chunk.localDimensions.nz ?? 1);
         }
 
-        const ghosts = dataContract.descriptor.requirements.ghostCells;
+        const ghosts = dataContract.descriptor.requirements?.ghostCells ?? 0;
         const cellsPerFaceRaw = (maxNx + 2 * ghosts) * (maxNy + 2 * ghosts) * (grid.config.dimensions.nz > 1 ? (maxNz + 2 * ghosts) : 1);
 
         // WebGPU Alignment: Storage buffer offsets must be multiples of 256 bytes.

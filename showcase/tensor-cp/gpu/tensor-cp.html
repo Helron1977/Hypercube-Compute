@@ -1,17 +1,36 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tensor-CP GPU Execution</title>
+    <title>Algebra-Core_GPU</title>
+    <link rel="stylesheet" href="../../assets/showcase.css">
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; padding: 2rem; }
-        #log { font-family: monospace; background: #1e293b; padding: 1rem; border-radius: 0.5rem; height: 300px; overflow-y: auto; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050f23;
+            color: #fff;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1a0a16 0%, #050f23 100%);
+        }
+        canvas {
+            max-width: 98vw;
+            max-height: 98vh;
+            border-radius: 4px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5), 0 0 2px rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 <body>
-    <h1>Tensor-CP (WebGPU Tensor Fabric)</h1>
-    <p>Status: <span id="status">Initializing...</span></p>
-    <div id="log"></div>
+    <div id="canvas-container"></div>
+    <a href="../../index.html" class="hub-button">Back to Hub</a>
     <script type="module" src="../cpu/tensor-cp.ts"></script>
 </body>
 </html>

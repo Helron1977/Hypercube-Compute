@@ -1,5 +1,5 @@
 {
-    "$schema": "https://hypercube-neo.dev/schema/v4.json",
+    "$schema": "../../../manifest-schema.json",
     "name": "SDF O(1) Spatial Engine (GPU)",
     "version": "1.0.0",
     "engine": {
