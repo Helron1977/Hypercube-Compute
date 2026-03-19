@@ -47,7 +47,7 @@ export class GpuBoundarySynchronizer implements IBoundarySynchronizer {
 
         const dataContract = grid.dataContract as DataContract;
         const descriptor = dataContract.descriptor;
-        const padding = descriptor.requirements.ghostCells;
+        const padding = descriptor.requirements?.ghostCells ?? 0;
         if (padding === 0) return; // Nothing to sync
 
         const syncTasks: { srcOffset: number, dstOffset: number, count: number, stride: number }[] = [];

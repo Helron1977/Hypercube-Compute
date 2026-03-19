@@ -183,6 +183,31 @@ export class MasterBuffer implements IMasterBuffer {
     }
 
     /**
+     * Retrieves the data for a specific face.
+     * @param chunkId ID of the target chunk
+     * @param faceName Logical face name
+     * @returns The Float32Array view of the face data
+     */
+    public getFaceData(chunkId: string, faceName: string): Float32Array {
+        const views = this.getChunkViews(chunkId);
+        const dataContract = (this.vGrid as any).dataContract as DataContract;
+        const descriptor = dataContract.descriptor;
+        const faceIdx = descriptor.faces.findIndex((f: any) => f.name === faceName);
+
+        if (faceIdx === -1) {
+            throw new Error(`MasterBuffer: Face '${faceName}' not found in descriptor.`);
+        }
+
+        const faceMappings = dataContract.getFaceMappings();
+        let bufIdx = 0;
+        for (let i = 0; i < faceIdx; i++) {
+            bufIdx += faceMappings[i].isPingPong ? 2 : 1;
+        }
+
+        return views.faces[bufIdx];
+    }
+
+    /**
      * Injects data into a specific face.
      * @param chunkId Target chunk
      * @param faceName Logical face name

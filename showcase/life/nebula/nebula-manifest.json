@@ -1,0 +1,41 @@
+{
+    "config": {
+        "dimensions": { "nx": 64, "ny": 32, "nz": 64 },
+        "chunks": { "x": 1, "y": 1, "z": 1 },
+        "boundaries": { "all": { "role": "wall" } },
+        "precision": "f32",
+        "mode": "gpu"
+    },
+    "engine": {
+        "requirements": { "ghostCells": 1 },
+        "faces": [
+            { "name": "water_h", "isPingPong": true },
+            { "name": "sdf_predator_x", "isPingPong": true },
+            { "name": "sdf_predator_y", "isPingPong": true },
+            { "name": "sdf_predator_z", "isPingPong": true },
+            { "name": "sdf_avoid_x", "isPingPong": true },
+            { "name": "sdf_avoid_y", "isPingPong": true },
+            { "name": "sdf_avoid_z", "isPingPong": true },
+            { "name": "strategy_heatmap", "isPingPong": false }
+        ],
+        "rules": [
+            {
+                "type": "neo-ocean-v1",
+                "source": "water_h",
+                "params": { "tau_0": 0.85, "cflLimit": 0.35 }
+            },
+            {
+                "type": "neo-sdf",
+                "source": "sdf_predator"
+            },
+            {
+                "type": "neo-sdf",
+                "source": "sdf_avoid"
+            },
+            {
+                "type": "neo-tensor-cp-v1",
+                "params": { "rank": 10, "regularization": 0.05 }
+            }
+        ]
+    }
+}

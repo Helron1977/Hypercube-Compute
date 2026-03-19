@@ -85,6 +85,11 @@ export interface IMasterBuffer {
     setFaceData(chunkId: string, faceName: string, data: Float32Array | number[], fillAllPingPong?: boolean): void;
 
     /**
+     * Retrieves the Float32Array view for a specific face.
+     */
+    getFaceData(chunkId: string, faceName: string): Float32Array;
+
+    /**
      * Copy data from GPU back to the CPU ArrayBuffer.
      */
     syncToHost(): Promise<void>;

@@ -16,9 +16,10 @@ export class VirtualGrid implements IVirtualGrid {
         mapConstructor: IMapConstructor = new MapConstructor()
     ) {
         this.dataContract = new DataContract(descriptor);
+        const chunks = config.chunks ?? { x: 1, y: 1, z: 1 };
         this.chunks = mapConstructor.buildMap(
             config.dimensions,
-            config.chunks,
+            chunks,
             config.boundaries
         );
     }
@@ -28,10 +29,11 @@ export class VirtualGrid implements IVirtualGrid {
     }
 
     get chunkLayout(): { x: number; y: number; z: number } {
+        const c = this.config.chunks ?? { x: 1, y: 1, z: 1 };
         return {
-            x: this.config.chunks.x,
-            y: this.config.chunks.y,
-            z: this.config.chunks.z ?? 1
+            x: c.x,
+            y: c.y,
+            z: c.z ?? 1
         };
     }
 

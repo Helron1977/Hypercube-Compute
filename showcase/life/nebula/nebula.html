@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life Nebula - 3D Hypercube Aquarium</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #030712;
+            --panel: rgba(15, 23, 42, 0.7);
+            --accent: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.3);
+            --danger: #f43f5e;
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 30px;
+            box-sizing: border-box;
+        }
+
+        .glass-panel {
+            background: var(--panel);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            pointer-events: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+
+        .brand p {
+            margin: 5px 0 0;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        .stats-hud {
+            text-align: right;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+        }
+
+        .stat-item {
+            margin-bottom: 4px;
+        }
+
+        .stat-label { color: var(--text-dim); }
+        .stat-val { color: var(--accent); }
+
+        .control-panel {
+            width: 320px;
+            align-self: flex-start;
+        }
+
+        h2 {
+            font-size: 0.9rem;
+            margin: 0 0 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        }
+
+        .control-group { margin-bottom: 15px; }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 8px;
+            color: var(--text-dim);
+        }
+
+        input[type=range] {
+            width: 100%;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            height: 4px;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .entity-legend {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.8rem;
+        }
+
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .dot-predator { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+        .dot-prey { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+        footer {
+            display: flex;
+            justify-content: center;
+        }
+
+        #loader {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(56, 189, 248, 0.1);
+            border-top: 3px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .loading-text {
+            margin-top: 20px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.8rem;
+            color: var(--accent);
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="loader">
+        <div class="spinner"></div>
+        <div class="loading-text">Initializing 3D Nebula...</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div class="overlay">
+        <header>
+            <div class="brand glass-panel">
+                <h1>Life Nebula</h1>
+                <p>3D Multi-Hypercube Aquarium Intelligence</p>
+            </div>
+            <div class="stats-hud glass-panel">
+                <div class="stat-item"><span class="stat-label">Frame Time:</span> <span class="stat-val" id="stat-fps">0ms</span></div>
+                <div class="stat-item"><span class="stat-label">SDF Engine A (Predator):</span> <span class="stat-val" id="stat-sdf-a">Active</span></div>
+                <div class="stat-item"><span class="stat-label">SDF Engine B (Rescue):</span> <span class="stat-val" id="stat-sdf-b">Active</span></div>
+                <div class="stat-item"><span class="stat-label">Tensor-CP:</span> <span class="stat-val" id="stat-tensor">Optimizing</span></div>
+            </div>
+        </header>
+
+        <div class="control-panel glass-panel">
+            <h2>Aquarium Controls</h2>
+            
+            <div class="control-group">
+                <div class="control-label"><span>Predator Aggression</span> <span id="val-aggression">75%</span></div>
+                <input type="range" id="slider-aggression" value="75" min="0" max="100">
+            </div>
+
+            <div class="control-group">
+                <div class="control-label"><span>Prey Escape Velocity</span> <span id="val-evasion">85%</span></div>
+                <input type="range" id="slider-evasion" value="85" min="0" max="100">
+            </div>
+
+            <div class="entity-legend">
+                <div class="legend-item"><div class="dot dot-predator"></div> <span>Great White (Pathfinder SDF)</span></div>
+                <div class="legend-item"><div class="dot dot-prey"></div> <span>Neon Schools (Repulsion SDF)</span></div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="glass-panel" style="font-size: 0.7rem; color: var(--text-dim);">
+                &copy; Hypercube Neo Engine 4.0 - Advanced Agentic Simulation
+            </div>
+        </footer>
+    </div>
+
+    <!-- Three.js + Loaders from CDN -->
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.156.1/build/three.module.js",
+            "three/examples/jsm/": "https://unpkg.com/three@0.156.1/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="./nebula.ts"></script>
+</body>
+</html>

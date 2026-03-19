@@ -7,6 +7,7 @@ export class MapConstructor implements IMapConstructor {
         chunks: { x: number; y: number; z?: number },
         globalBoundaries: GridBoundaries
     ): VirtualChunk[] {
+        if (!chunks) chunks = { x: 1, y: 1, z: 1 };
         const virtualChunks: VirtualChunk[] = [];
         const numZ = chunks.z ?? 1;
 

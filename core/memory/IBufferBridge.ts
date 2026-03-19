@@ -34,7 +34,15 @@ export interface IBufferBridge {
      * @param data The data to inject
      * @param fillAllPingPong Whether to fill both ping-pong buffers (Mode-aware)
      */
-    setFaceData(chunkId: string, faceName: string, data: Float32Array, fillAllPingPong?: boolean): void;
+    setFaceData(chunkId: string, faceName: string, data: Float32Array | number[], fillAllPingPong?: boolean): void;
+
+    /**
+     * Retrieves the data for a specific face.
+     * @param chunkId ID of the target chunk
+     * @param faceName Name of the target face
+     * @returns The Float32Array view of the face data
+     */
+    getFaceData(chunkId: string, faceName: string): Float32Array;
 
     /**
      * Synchronizes host memory (CPU) with device memory (GPU).
