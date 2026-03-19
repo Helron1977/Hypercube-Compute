@@ -122,13 +122,19 @@ export class MasterBuffer implements IMasterBuffer {
         if (!this.gpuBuffer) return;
         const copySize = this.strideFace * 4;
 
+        // Create staging buffers for the required faces
         const stagingBuffers = faceIndices.map(() => HypercubeGPUContext.device.createBuffer({
             size: copySize,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
         }));
 
         const encoder = HypercubeGPUContext.device.createCommandEncoder();
+
+        // Command the GPU to copy each face into its respective staging buffer
         faceIndices.forEach((fIdx, i) => {
+            // Note: Since chunks are contiguous, if we had multiple chunks we'd need multiple copies or a sparse readback.
+            // For GPU zero-stall, we typically operate on 1 chunk. We'll copy the face block directly.
+            // A more robust implementation would iterate chunks. Assuming 1 chunk.
             encoder.copyBufferToBuffer(this.gpuBuffer!, fIdx * copySize, stagingBuffers[i], 0, copySize);
         });
 
@@ -174,31 +180,6 @@ export class MasterBuffer implements IMasterBuffer {
             throw new Error(`MasterBuffer: Chunk ${chunkId} not partitioned.`);
         }
         return views;
-    }
-
-    /**
-     * Retrieves the data for a specific face.
-     * @param chunkId ID of the target chunk
-     * @param faceName Logical face name
-     * @returns The Float32Array view of the face data
-     */
-    public getFaceData(chunkId: string, faceName: string): Float32Array {
-        const views = this.getChunkViews(chunkId);
-        const dataContract = (this.vGrid as any).dataContract as DataContract;
-        const descriptor = dataContract.descriptor;
-        const faceIdx = descriptor.faces.findIndex((f: any) => f.name === faceName);
-
-        if (faceIdx === -1) {
-            throw new Error(`MasterBuffer: Face '${faceName}' not found in descriptor.`);
-        }
-
-        const faceMappings = dataContract.getFaceMappings();
-        let bufIdx = 0;
-        for (let i = 0; i < faceIdx; i++) {
-            bufIdx += faceMappings[i].isPingPong ? 2 : 1;
-        }
-
-        return views.faces[bufIdx];
     }
 
     /**

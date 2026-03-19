@@ -1,6 +1,6 @@
 {
     "config": {
-        "dimensions": { "nx": 64, "ny": 32, "nz": 64 },
+        "dimensions": { "nx": 64, "ny": 64, "nz": 32 },
         "chunks": { "x": 1, "y": 1, "z": 1 },
         "boundaries": { "all": { "role": "wall" } },
         "precision": "f32",

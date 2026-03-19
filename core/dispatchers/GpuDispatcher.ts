@@ -33,7 +33,7 @@ export class GpuDispatcher implements IDispatcher {
         this.cacheAbsoluteIndices();
 
         // Create a uniform buffer for simulation parameters (aligned to device limits)
-        const bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(1024); 
+        const bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(384); 
         this.uniformBuffer = this.device.createBuffer({
             size: bytesPerChunkAligned,
             usage: (GPUBufferUsage as any).UNIFORM | (GPUBufferUsage as any).STORAGE | (GPUBufferUsage as any).COPY_DST,
@@ -50,15 +50,9 @@ export class GpuDispatcher implements IDispatcher {
         }
     }
 
-    public setRuleParams(type: string, params: any): void {
-        const grid = this.vGrid as any;
-        const descriptor = grid.dataContract.descriptor;
-        const rule = descriptor.rules.find((r: any) => r.type === type);
-        if (rule) {
-            rule.params = { ...(rule.params || {}), ...params };
-        }
-    }
-
+    /**
+     * Executes all rules defined in the engine descriptor on the GPU.
+     */
     public async dispatch(t: number = 0): Promise<void> {
         const grid = this.vGrid as any;
         const dataContract = grid.dataContract as DataContract;
@@ -70,7 +64,7 @@ export class GpuDispatcher implements IDispatcher {
         }
 
         // 1. Prepare Aligned Uniforms
-        const bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(1024);
+        const bytesPerChunkAligned = HypercubeGPUContext.alignToUniform(384);
         const totalUniformSize = this.vGrid.chunks.length * bytesPerChunkAligned;
 
         if (!this.uniformBuffer || this.uniformBuffer.size < totalUniformSize) {
@@ -148,25 +142,24 @@ export class GpuDispatcher implements IDispatcher {
                 u32Data[base + 9] = vChunk.y;
                 u32Data[base + 10] = strideFace;
                 u32Data[base + 11] = objectsCount;
-                u32Data[base + 12] = this.vGrid.dimensions.nz || 1;
 
-                u32Data[base + 13] = getIdx('obstacles', 'read');
-                u32Data[base + 14] = findFirstIdx(['vx', 'temperature'], 'read');
-                u32Data[base + 16] = findFirstIdx(['vorticity', 'rho', 'water_h'], 'read');
-                u32Data[base + 17] = findFirstIdx(['smoke', 'biology'], 'read');
+                u32Data[base + 12] = getIdx('obstacles', 'read');
+                u32Data[base + 13] = findFirstIdx(['vx', 'temperature'], 'read');
+                u32Data[base + 14] = getIdx('vy', 'read');
+                u32Data[base + 15] = findFirstIdx(['vorticity', 'rho'], 'read');
+                u32Data[base + 16] = findFirstIdx(['smoke', 'biology'], 'read');
 
-                u32Data[base + 18] = findFirstIdx(['vx', 'temperature'], 'write');
-                u32Data[base + 19] = getIdx('vy', 'write');
-                u32Data[base + 20] = findFirstIdx(['vorticity', 'rho', 'water_h'], 'write');
-                u32Data[base + 21] = findFirstIdx(['smoke', 'biology'], 'write');
+                u32Data[base + 17] = findFirstIdx(['vx', 'temperature'], 'write');
+                u32Data[base + 18] = getIdx('vy', 'write');
+                u32Data[base + 19] = findFirstIdx(['vorticity', 'rho'], 'write');
+                u32Data[base + 20] = findFirstIdx(['smoke', 'biology'], 'write');
 
-                u32Data[base + 22] = this.faceIndexCache.get('f0') || 0;
+                u32Data[base + 21] = this.faceIndexCache.get('f0') || 0;
 
                 if (scheme.type === 'neo-sdf') {
                     u32Data[base + 22] = Math.floor(t);
                     u32Data[base + 23] = this.faceIndexCache.get(scheme.source + '_x') || 0;
                     u32Data[base + 30] = this.faceIndexCache.get(scheme.source + '_y') || 0;
-                    u32Data[base + 31] = this.faceIndexCache.get(scheme.source + '_z') || 0;
                 } else if (scheme.type === 'neo-ocean-v1') {
                     f32Data[base + 22] = (scheme.params?.bioDiffusion as number) ?? 0.001;
                     f32Data[base + 23] = (scheme.params?.bioGrowth as number) ?? 0.01;
@@ -221,29 +214,20 @@ export class GpuDispatcher implements IDispatcher {
                 passEncoder.setPipeline(pipeline);
                 passEncoder.setBindGroup(0, bindGroup);
                 
-                const nx_chunk = vChunk.localDimensions.nx;
-                const ny_chunk = vChunk.localDimensions.ny;
-                const nz_chunk = this.vGrid.dimensions.nz || 1;
-
-                if (scheme.type === 'neo-sdf') {
-                    passEncoder.dispatchWorkgroups(Math.ceil(nx_chunk / 8), Math.ceil(ny_chunk / 8), nz_chunk);
-                } else if (scheme.type === 'neo-ocean-v1') {
-                    const nx_full = this.vGrid.dimensions.nx;
-                    const nz_full = this.vGrid.dimensions.nz || 1;
-                    passEncoder.dispatchWorkgroups(Math.ceil(nx_full / 16), Math.ceil(nz_full / 16), 1);
+                if (scheme.type === 'neo-tensor-cp-v1') {
+                    const nx_chunk = vChunk.localDimensions.nx;
+                    const ny_chunk = vChunk.localDimensions.ny;
+                    const nz = this.vGrid.dimensions.nz || 1;
+                    const maxDim = Math.max(nx_chunk, ny_chunk, nz);
+                    passEncoder.dispatchWorkgroups(Math.ceil(maxDim / 16), 1, 1);
                 } else {
-                    const maxDimX = Math.ceil(nx_chunk / 16);
-                    const maxDimY = Math.ceil(ny_chunk / 16);
-                    const maxDimZ = Math.ceil(nz_chunk / 8); 
-                    // This 3D dispatch is backward-compatible with 1D/2D kernels (dimensions will be 1)
-                    passEncoder.dispatchWorkgroups(maxDimX, maxDimY, maxDimZ);
+                    const nx_chunk = vChunk.localDimensions.nx;
+                    const ny_chunk = vChunk.localDimensions.ny;
+                    passEncoder.dispatchWorkgroups(Math.ceil(nx_chunk / 16), Math.ceil(ny_chunk / 16));
                 }
                 passEncoder.end();
             }
         }
-        // 3. Upload Aligned Uniforms to GPU
-        this.device.queue.writeBuffer(this.uniformBuffer!, 0, u32Data.buffer);
-
         this.device.queue.submit([commandEncoder.finish()]);
     }
 
@@ -264,7 +248,7 @@ export class GpuDispatcher implements IDispatcher {
             layout: pipeline.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: { buffer: dataBuffer, offset: dataOffset, size: dataSize } },
-                { binding: 1, resource: { buffer: uniformBuffer, offset: uniformOffset, size: HypercubeGPUContext.alignToUniform(1024) } }
+                { binding: 1, resource: { buffer: uniformBuffer, offset: uniformOffset, size: HypercubeGPUContext.alignToUniform(384) } }
             ]
         });
 

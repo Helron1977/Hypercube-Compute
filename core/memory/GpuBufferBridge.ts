@@ -34,12 +34,8 @@ export class GpuBufferBridge implements IBufferBridge {
         this.mBuffer.initializeEquilibrium();
     }
 
-    public setFaceData(chunkId: string, faceName: string, data: Float32Array | number[], fillAllPingPong: boolean = false): void {
+    public setFaceData(chunkId: string, faceName: string, data: Float32Array, fillAllPingPong: boolean = false): void {
         this.mBuffer.setFaceData(chunkId, faceName, data, fillAllPingPong);
-    }
-
-    public getFaceData(chunkId: string, faceName: string): Float32Array {
-        return this.mBuffer.getFaceData(chunkId, faceName);
     }
 
     public syncToDevice(): void {
