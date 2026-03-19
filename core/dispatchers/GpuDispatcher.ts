@@ -50,9 +50,15 @@ export class GpuDispatcher implements IDispatcher {
         }
     }
 
-    /**
-     * Executes all rules defined in the engine descriptor on the GPU.
-     */
+    public setRuleParams(type: string, params: any): void {
+        const grid = this.vGrid as any;
+        const descriptor = grid.dataContract.descriptor;
+        const rule = descriptor.rules.find((r: any) => r.type === type);
+        if (rule) {
+            rule.params = { ...(rule.params || {}), ...params };
+        }
+    }
+
     public async dispatch(t: number = 0): Promise<void> {
         const grid = this.vGrid as any;
         const dataContract = grid.dataContract as DataContract;
@@ -146,13 +152,12 @@ export class GpuDispatcher implements IDispatcher {
 
                 u32Data[base + 13] = getIdx('obstacles', 'read');
                 u32Data[base + 14] = findFirstIdx(['vx', 'temperature'], 'read');
-                u32Data[base + 15] = getIdx('vy', 'read');
-                u32Data[base + 16] = findFirstIdx(['vorticity', 'rho'], 'read');
+                u32Data[base + 16] = findFirstIdx(['vorticity', 'rho', 'water_h'], 'read');
                 u32Data[base + 17] = findFirstIdx(['smoke', 'biology'], 'read');
 
                 u32Data[base + 18] = findFirstIdx(['vx', 'temperature'], 'write');
                 u32Data[base + 19] = getIdx('vy', 'write');
-                u32Data[base + 20] = findFirstIdx(['vorticity', 'rho'], 'write');
+                u32Data[base + 20] = findFirstIdx(['vorticity', 'rho', 'water_h'], 'write');
                 u32Data[base + 21] = findFirstIdx(['smoke', 'biology'], 'write');
 
                 u32Data[base + 22] = this.faceIndexCache.get('f0') || 0;

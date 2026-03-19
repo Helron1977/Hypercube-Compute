@@ -238,7 +238,7 @@ class LifeNebula {
         const distFromSurface = Math.abs(this.shark.position.y - vh);
         if (distFromSurface < 2.0 && this.engine) {
             const g = this.worldToGrid(this.shark.position);
-            this.engine.dispatcher.setParams({
+            (this.engine.dispatcher as any).setRuleParams('neo-ocean-v1', {
                 objects: [
                     { pos: { x: g.x, y: g.z }, dim: { x: 4, y: 4 }, isObstacle: 0, biology: 0, objType: 1, rho: 1.5 },
                     ...new Array(7).fill({ pos: { x: -1000, y: -1000 }, dim: { x: 1, y: 1 }, isObstacle: 0, biology: 0, objType: 0, rho: 0 })
