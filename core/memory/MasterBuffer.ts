@@ -120,38 +120,25 @@ export class MasterBuffer implements IMasterBuffer {
      */
     public async syncFacesToHost(faceIndices: number[]): Promise<void> {
         if (!this.gpuBuffer) return;
-        const bytesPerFaceAligned = this.strideFace * 4;
+        const copySize = this.strideFace * 4;
 
-        // Map logical face indices to physical slots (accounting for ping-pongs)
-        const dataContract = (this.vGrid as any).dataContract as DataContract;
-        const faceMappings = dataContract.getFaceMappings();
-        const physicalIndices = faceIndices.map(logicalIdx => {
-            let pIdx = 0;
-            for (let i = 0; i < logicalIdx; i++) {
-                pIdx += faceMappings[i].isPingPong ? 2 : 1;
-            }
-            // For ping-pong faces, we sync the 'read' buffer (parity is handled in CPU bridge if needed, 
-            // but for simple showcases we assume the primary slot is the one we want).
-            return pIdx;
-        });
-
-        const stagingBuffers = physicalIndices.map(() => HypercubeGPUContext.device.createBuffer({
-            size: bytesPerFaceAligned,
+        const stagingBuffers = faceIndices.map(() => HypercubeGPUContext.device.createBuffer({
+            size: copySize,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
         }));
 
         const encoder = HypercubeGPUContext.device.createCommandEncoder();
-        physicalIndices.forEach((pIdx, i) => {
-            encoder.copyBufferToBuffer(this.gpuBuffer!, pIdx * bytesPerFaceAligned, stagingBuffers[i], 0, bytesPerFaceAligned);
+        faceIndices.forEach((fIdx, i) => {
+            encoder.copyBufferToBuffer(this.gpuBuffer!, fIdx * copySize, stagingBuffers[i], 0, copySize);
         });
 
         HypercubeGPUContext.device.queue.submit([encoder.finish()]);
 
         await Promise.all(stagingBuffers.map(b => b.mapAsync(GPUMapMode.READ)));
 
-        physicalIndices.forEach((pIdx, i) => {
+        faceIndices.forEach((fIdx, i) => {
             const data = new Float32Array(stagingBuffers[i].getMappedRange());
-            const cpuView = new Float32Array(this.rawBuffer, pIdx * bytesPerFaceAligned, this.strideFace);
+            const cpuView = new Float32Array(this.rawBuffer, fIdx * copySize, this.strideFace);
             cpuView.set(data);
             stagingBuffers[i].unmap();
             stagingBuffers[i].destroy();

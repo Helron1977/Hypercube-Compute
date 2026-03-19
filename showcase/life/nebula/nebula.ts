@@ -287,11 +287,11 @@ class LifeNebula {
         bridge.setFaceData(chunk.id, 'sdf_avoid_y', ay);
         bridge.setFaceData(chunk.id, 'sdf_avoid_z', az);
 
-        // 4. Step & Sync
+        // 4. Step & Sync (Full Sync for reliability)
         console.debug("Nebula: Engine Step...");
         await this.engine.step(1);
         console.debug("Nebula: Syncing to Host...");
-        await bridge.syncToHost(['sdf_predator_x', 'sdf_predator_y', 'sdf_predator_z', 'sdf_avoid_x', 'sdf_avoid_y', 'sdf_avoid_z', 'water_h', 'strategy_heatmap'].map(f => this.engine.getFaceLogicalIndex(f)));
+        await bridge.syncToHost(); // Full Buffer Sync
         console.debug("Nebula: Sync Done.");
 
         // 5. 3D Steering
@@ -362,21 +362,10 @@ class LifeNebula {
         const pAttr = this.waterGeo.attributes.position;
         const gy = NY - 1; 
 
-        // DIAGNOSTIC: Check data range every 100 frames
-        if (Math.floor(Date.now() / 16) % 100 === 0) {
-            let min = 100, max = -100, sum = 0;
-            for(let k=0; k<hData.length; k++) {
-                if (hData[k] < min) min = hData[k];
-                if (hData[k] > max) max = hData[k];
-                sum += hData[k];
-            }
-            console.debug(`Nebula Diagnostics: Water Data [Min: ${min.toFixed(4)}, Max: ${max.toFixed(4)}, Avg: ${(sum/hData.length).toFixed(4)}]`);
-        }
-
         for (let j=0; j<NZ; j++) {
             for (let i=0; i<NX; i++) {
                 const vertIdx = j * NX + i;
-                const physIdx = (j * NY + gy) * NX + i; // Match (z * NY + y) * NX + x
+                const physIdx = (j * NY + gy) * NX + i; // Correct (z * NY + y) * NX + x mapping
                 const val = hData[physIdx];
                 pAttr.setY(vertIdx, isNaN(val) ? 0 : (val - 1.0) * 45.0); 
             }
