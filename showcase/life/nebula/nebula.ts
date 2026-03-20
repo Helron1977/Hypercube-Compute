@@ -224,21 +224,44 @@ class LifeNebula {
         await this.updateAI();
         const b = 9.8; const vh = 4.8;
         
+        // --- SHARK BOUNDARY STEERING ---
+        const distX = b - Math.abs(this.shark.position.x);
+        const distZ = b - Math.abs(this.shark.position.z);
+        if ((distX < 3.5 || distZ < 3.5) && this.sharkState !== SharkState.HUNT) {
+            const push = new THREE.Vector3(-this.shark.position.x, 0, -this.shark.position.z).normalize().multiplyScalar(0.1);
+            this.sharkVel.lerp(push, 0.15);
+        }
+
         // Move Shark
         this.shark.position.add(this.sharkVel);
         if (this.sharkVel.lengthSq() > 0.001) this.shark.lookAt(this.shark.position.clone().add(this.sharkVel));
         this.shark.position.clamp(new THREE.Vector3(-b, -vh, -b), new THREE.Vector3(b, vh, b));
 
-        // Move Prey (Escape Drift)
+        // Move Prey (Boundary + Escape)
         this.preyList.forEach((p, i) => {
+            // Wall avoidance for prey
+            const pDX = b - Math.abs(p.position.x);
+            const pDZ = b - Math.abs(p.position.z);
+            if (pDX < 2 || pDZ < 2) {
+                const pPush = new THREE.Vector3(-p.position.x, 0, -p.position.z).normalize().multiplyScalar(0.05);
+                this.preyVels[i].lerp(pPush, 0.1);
+            }
+
             p.position.add(this.preyVels[i]);
             if (this.preyVels[i].lengthSq() > 0.001) p.lookAt(p.position.clone().add(this.preyVels[i]));
             p.position.clamp(new THREE.Vector3(-b, -vh, -b), new THREE.Vector3(b, vh, b));
             
-            // Simple evasion
-            if (p.position.distanceTo(this.shark.position) < 4) {
-                const evade = p.position.clone().sub(this.shark.position).normalize().multiplyScalar(0.15);
-                this.preyVels[i].lerp(evade, 0.2);
+            // Hunter Evasion
+            const dist = p.position.distanceTo(this.shark.position);
+            if (dist < 4.5) {
+                const evade = p.position.clone().sub(this.shark.position).normalize();
+                
+                // --- CORNER PRESSURE ---
+                // If prey is stuck in a corner, it's trapped!
+                if (pDX < 1.5 && pDZ < 1.5) evade.multiplyScalar(0.02); // Panicked slowdown
+                else evade.multiplyScalar(0.18); 
+
+                this.preyVels[i].lerp(evade, 0.25);
             }
         });
 
