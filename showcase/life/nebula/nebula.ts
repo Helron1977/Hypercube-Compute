@@ -3,8 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { HypercubeNeoFactory } from '../../../core/HypercubeNeoFactory';
 
 /**
- * LIFE NEBULA V47.0 - CRYSTAL PRECISION
- * Goal: Axis-Aligned Ripples. Total Side Transparency. Bubbles Visibility.
+ * LIFE NEBULA V48.0 - THE PERFECT SYNC
+ * Goal: Correct Z-Mirror. Shiny Face Up. Crystal Integrity.
  */
 const NX = 64; const NY = 64;
 const TANK_SIZE = 20;
@@ -67,13 +67,13 @@ class LifeNebula {
         // 1. Crystal Water Volume (Ultra-Translucent)
         const volumeMat = new THREE.MeshPhysicalMaterial({ 
             color: 0x0ea5e9, transparent: true, opacity: 0.05, transmission: 0.99,
-            metalness: 0, roughness: 0, ior: 1.05, thickness: 0.5
+            metalness: 0, roughness: 0, ior: 1.05, thickness: 0.1
         });
         this.scene.add(new THREE.Mesh(new THREE.BoxGeometry(TANK_SIZE, TANK_SIZE, TANK_SIZE), volumeMat));
 
         // 2. Dynamic Adaptive Panels
         const wallMat = new THREE.MeshStandardMaterial({ 
-            color: 0x082f49, transparent: true, opacity: 0.2, side: THREE.DoubleSide 
+            color: 0x082f49, transparent: true, opacity: 0.15, side: THREE.DoubleSide 
         });
         
         const createWall = (nx: number, ny: number, nz: number, px: number, py: number, pz: number, rotX = 0, rotY = 0) => {
@@ -90,39 +90,37 @@ class LifeNebula {
         createWall(-1, 0, 0, 10.05, 0, 0, 0, -Math.PI/2); // Right
         createWall(0, 1, 0, 0, -10.05, 0, -Math.PI/2); // Bottom
 
-        // 3. Reactive Surface
+        // 3. Reactive Surface (Shiny Side Up)
         this.surfaceGeo = new THREE.PlaneGeometry(TANK_SIZE, TANK_SIZE, NX - 1, NY - 1);
         const colorAttr = new THREE.BufferAttribute(new Float32Array(this.surfaceGeo.attributes.position.count * 3), 3);
         this.surfaceGeo.setAttribute('color', colorAttr);
         const sMat = new THREE.MeshPhysicalMaterial({ 
-            color: 0x0ea5e9, transparent: true, opacity: 0.8, transmission: 0.7,
-            vertexColors: true, metalness: 0.1, roughness: 0.02, clearcoat: 1.0, side: THREE.DoubleSide
+            color: 0x1e3a8a, transparent: true, opacity: 0.85, transmission: 0.6,
+            vertexColors: true, metalness: 0.2, roughness: 0.01, clearcoat: 1.0, 
+            side: THREE.FrontSide // Shiny on Top face
         });
         const surfaceMesh = new THREE.Mesh(this.surfaceGeo, sMat);
-        surfaceMesh.rotation.x = -Math.PI / 2;
+        surfaceMesh.rotation.x = -Math.PI / 2; // Normal points UP
         surfaceMesh.position.y = SURFACE_Y + 0.05;
         this.scene.add(surfaceMesh);
 
-        // 4. Bubbles (Enhanced Visibility)
+        // 4. Bubbles (Crystal Clarity)
         this.bubbleGeos = new THREE.BufferGeometry();
-        const count = 250;
+        const count = 300;
         const pos = new Float32Array(count * 3);
-        const bColors = new Float32Array(count * 3);
         for(let i=0; i<count; i++) {
             pos[i*3] = (Math.random()-0.5)*19;
-            pos[i*3+1] = (Math.random()-0.5)*19;
+            pos[i*3+1] = (Math.random()-0.5)*18;
             pos[i*3+2] = (Math.random()-0.5)*19;
-            bColors[i*3]=0.8; bColors[i*3+1]=1.0; bColors[i*3+2]=1.0;
         }
         this.bubbleGeos.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-        this.bubbleGeos.setAttribute('color', new THREE.BufferAttribute(bColors, 3));
-        this.bubbles = new THREE.Points(this.bubbleGeos, new THREE.PointsMaterial({ size: 0.1, vertexColors: true, transparent: true, opacity: 0.8 }));
+        this.bubbles = new THREE.Points(this.bubbleGeos, new THREE.PointsMaterial({ color: 0xffffff, size: 0.08, transparent: true, opacity: 0.7 }));
         this.scene.add(this.bubbles);
 
         // 5. Entities
         this.shark = new THREE.Group();
-        this.sharkMat = new THREE.MeshPhysicalMaterial({ color: 0x334155, metalness: 0.9, roughness: 0.1, clearcoat: 1.0 });
-        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.4, 4, 16), this.sharkMat);
+        this.sharkMat = new THREE.MeshPhysicalMaterial({ color: 0x1e293b, metalness: 0.9, roughness: 0.05, clearcoat: 1.0 });
+        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.4, 8, 16), this.sharkMat);
         body.rotation.x = Math.PI / 2;
         this.shark.add(body); this.scene.add(this.shark);
 
@@ -147,11 +145,12 @@ class LifeNebula {
     }
 
     private worldToGrid(v: THREE.Vector3) {
-        // BASELINE ALIGNMENT - BACK TO BASICS
-        // No inversions. Let's find the true mirror axis from here.
+        // Z-MIRROR FIX (Final Alignment)
+        // If x=Right, gx=63. If z=Front, gz=0.
+        // User reports Z-Flip (Axial Mirror). Correcting Z-injection only.
         return {
             x: Math.floor((v.x / TANK_SIZE + 0.5) * 63),
-            z: Math.floor((v.z / TANK_SIZE + 0.5) * 63)
+            z: Math.floor((1.0 - (v.z / TANK_SIZE + 0.5)) * 63) // Flip Z Injection
         };
     }
 
@@ -166,14 +165,14 @@ class LifeNebula {
             const config = (this.engine as any).vGrid.config;
             if (!config.objects) config.objects = [];
             
-            // Interaction: Soft Density Pulse (No Plateau)
+            // Interaction
             const dS = Math.abs(this.shark.position.y - SURFACE_Y);
             if (dS < 1.0 && this.splashCooldown-- <= 0) {
                 config.objects.push({
                     id: 'impact', type: 'circle',
-                    position: { x: gPos.x - 4, y: gPos.z - 4 },
-                    dimensions: { w: 8, h: 8 },
-                    properties: { rho: 1.25 }, rasterMode: "add" 
+                    position: { x: gPos.x - 5, y: gPos.z - 5 },
+                    dimensions: { w: 10, h: 10 },
+                    properties: { rho: 1.3 }, rasterMode: "add" 
                 });
                 this.splashCooldown = 15;
             }
@@ -191,9 +190,9 @@ class LifeNebula {
 
             for (let i = 0; i < pAttr.count; i++) {
                 const px = pAttr.getX(i); const pz = pAttr.getY(i);
-                // BASELINE DISPLAY ALIGNMENT
+                // Standard Mapping for Display
                 const gx = Math.floor((px / TANK_SIZE + 0.5) * 63);
-                const gy = Math.floor((pz / TANK_SIZE + 0.5) * 63);
+                const gy = Math.floor((1.0 - (pz / TANK_SIZE + 0.5)) * 63); // Flip Z Display to Match
                 const v = rData[(gy + 1) * stride + (gx + 1)];
                 const win = Math.min(1.0, Math.min(gx, gy, 63-gx, 63-gy) / 4.0);
                 
@@ -201,22 +200,22 @@ class LifeNebula {
                 h = Math.max(-H_LIMIT, Math.min(H_LIMIT, h));
                 pAttr.setZ(i, h);
                 
-                if (h > H_LIMIT * 0.8) cAttr.setXYZ(i, 1, 1, 1);
+                if (h > H_LIMIT * 0.8) cAttr.setXYZ(i, 1.0, 1.0, 1.0);
                 else if (h < -0.05) cAttr.setXYZ(i, 0.05, 0.25, 0.5);
-                else cAttr.setXYZ(i, 0.2, 0.6, 0.95);
+                else cAttr.setXYZ(i, 0.2, 0.65, 0.95);
             }
             pAttr.needsUpdate = true; cAttr.needsUpdate = true; this.surfaceGeo.computeVertexNormals();
 
             // Bubbles Move
             const bP = this.bubbleGeos.attributes.position.array as Float32Array;
             for(let i=0; i<bP.length/3; i++){
-                bP[i*3+1] += 0.05;
+                bP[i*3+1] += 0.06;
                 if(bP[i*3+1] > 10) bP[i*3+1] = -10;
             }
             this.bubbleGeos.attributes.position.needsUpdate = true;
 
-            // Hunting feedback
-            if (this.currentTargetIndex === -1 || Math.random() < 0.01) {
+            // Hunting Logic
+            if (this.currentTargetIndex === -1 || Math.random() < 0.005) {
                 let mD = 1000;
                 this.preyList.forEach((p, idx) => {
                     const d = p.position.distanceTo(this.shark.position);
@@ -239,7 +238,7 @@ class LifeNebula {
                 this.eatFlashCounter--;
             } else { this.sharkMat.emissiveIntensity = 0; }
 
-        } catch (e) { console.error("Nebula V47 Error:", e); }
+        } catch (e) { console.error("Nebula V48 Error:", e); }
         finally { this.isUpdating = false; }
     }
 
@@ -259,7 +258,7 @@ class LifeNebula {
             if (v.lengthSq() > 0.001) p.lookAt(p.position.clone().add(v));
         });
 
-        // Crystal Side Culling
+        // Dynamic Culling
         const camPos = this.camera.position.clone().normalize();
         this.sidePanels.forEach(p => {
             p.mesh.visible = (p.normal.dot(camPos) > 0); 
