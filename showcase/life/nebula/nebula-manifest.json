@@ -1,41 +1,66 @@
 {
-    "config": {
-        "dimensions": { "nx": 64, "ny": 64, "nz": 32 },
-        "chunks": { "x": 1, "y": 1, "z": 1 },
-        "boundaries": { "all": { "role": "wall" } },
-        "precision": "f32",
-        "mode": "gpu"
-    },
+    "$schema": "../../../manifest-schema.json",
+    "name": "Life Nebula - 2.5D Masterpiece",
+    "version": "1.0.0",
     "engine": {
-        "requirements": { "ghostCells": 1 },
+        "name": "Nebula-LBM",
+        "version": "1.0.0",
         "faces": [
-            { "name": "water_h", "isPingPong": true },
-            { "name": "sdf_predator_x", "isPingPong": true },
-            { "name": "sdf_predator_y", "isPingPong": true },
-            { "name": "sdf_predator_z", "isPingPong": true },
-            { "name": "sdf_avoid_x", "isPingPong": true },
-            { "name": "sdf_avoid_y", "isPingPong": true },
-            { "name": "sdf_avoid_z", "isPingPong": true },
-            { "name": "strategy_heatmap", "isPingPong": false }
+            { "name": "f0", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "f1", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "f2", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "f3", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "f4", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "f5", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "f6", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "f7", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "f8", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "obstacles", "type": "mask", "isSynchronized": true, "isReadOnly": true },
+            { "name": "vx", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "vy", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "water_h", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "biology", "type": "scalar", "isSynchronized": true, "isPingPong": true },
+            { "name": "sdf_predator_x", "type": "scalar", "isSynchronized": true, "isPingPong": false },
+            { "name": "sdf_predator_y", "type": "scalar", "isSynchronized": true, "isPingPong": false },
+            { "name": "sdf_escape_x", "type": "scalar", "isSynchronized": true, "isPingPong": false },
+            { "name": "sdf_escape_y", "type": "scalar", "isSynchronized": true, "isPingPong": false },
+            { "name": "strategy_heatmap", "type": "scalar", "isSynchronized": true, "isPingPong": false }
         ],
         "rules": [
             {
                 "type": "neo-ocean-v1",
-                "source": "water_h",
-                "params": { "tau_0": 0.85, "cflLimit": 0.35 }
+                "method": "BGK",
+                "source": "f0",
+                "params": {
+                    "omega": 1.7,
+                    "bioDiffusion": 0.005,
+                    "bioGrowth": 0.01
+                }
             },
             {
                 "type": "neo-sdf",
-                "source": "sdf_predator"
+                "source": "obstacles",
+                "target": "sdf_predator"
             },
             {
                 "type": "neo-sdf",
-                "source": "sdf_avoid"
-            },
-            {
-                "type": "neo-tensor-cp-v1",
-                "params": { "rank": 10, "regularization": 0.05 }
+                "source": "obstacles",
+                "target": "sdf_escape"
             }
-        ]
+        ],
+        "requirements": {
+            "ghostCells": 1,
+            "pingPong": true
+        }
+    },
+    "config": {
+        "dimensions": { "nx": 64, "ny": 64, "nz": 1 },
+        "chunks": { "x": 1, "y": 1 },
+        "boundaries": {
+            "left": { "role": "wall" }, "right": { "role": "wall" },
+            "top": { "role": "wall" }, "bottom": { "role": "wall" }
+        },
+        "mode": "gpu",
+        "objects": []
     }
 }

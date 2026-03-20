@@ -160,8 +160,8 @@ export class GpuDispatcher implements IDispatcher {
                     u32Data[base + 23] = this.faceIndexCache.get(scheme.source + '_x') || 0;
                     u32Data[base + 24] = this.faceIndexCache.get(scheme.source + '_y') || 0;
                 } else if (scheme.type === 'neo-ocean-v1') {
-                    f32Data[base + 22] = (scheme.params?.bioDiffusion as number) ?? 0.001;
-                    f32Data[base + 23] = (scheme.params?.bioGrowth as number) ?? 0.01;
+                    f32Data[base + 23] = (scheme.params?.bioDiffusion as number) ?? 0.001;
+                    f32Data[base + 24] = (scheme.params?.bioGrowth as number) ?? 0.01;
                 }
 
                 const topo = this.topologyResolver.resolve(vChunk, this.vGrid.chunkLayout, grid.config.boundaries);
