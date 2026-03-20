@@ -1,5 +1,5 @@
 import { IFactory } from './IFactory';
-import { IBoundarySynchronizer } from './topology/GridAbstractions';
+import { IBoundarySynchronizer, IMasterBuffer } from './topology/GridAbstractions';
 import { HypercubeConfig, EngineDescriptor, HypercubeManifest } from './types';
 import { VirtualGrid } from './topology/VirtualGrid';
 import { MasterBuffer } from './memory/MasterBuffer';
@@ -61,7 +61,7 @@ export class HypercubeNeoFactory implements IFactory {
 
         // 1. Virtual & Physical Layout
         const vGrid = this.createVirtualGrid(config, descriptor);
-        
+
         if (config.mode === 'gpu') {
             await HypercubeGPUContext.init();
         }
@@ -93,9 +93,9 @@ export class HypercubeNeoFactory implements IFactory {
     /**
      * Creates the appropriate memory bridge based on the execution mode.
      */
-    private createBridge(config: HypercubeConfig, mBuffer: MasterBuffer): IBufferBridge {
-        return config.mode === 'gpu' 
-            ? new GpuBufferBridge(mBuffer) 
+    private createBridge(config: HypercubeConfig, mBuffer: IMasterBuffer): IBufferBridge {
+        return config.mode === 'gpu'
+            ? new GpuBufferBridge(mBuffer)
             : new CpuBufferBridge(mBuffer);
     }
 
@@ -112,9 +112,9 @@ export class HypercubeNeoFactory implements IFactory {
      * Creates the appropriate numerical dispatcher (async for dynamic imports).
      */
     private async createDispatcher(
-        config: HypercubeConfig, 
-        vGrid: VirtualGrid, 
-        bridge: IBufferBridge, 
+        config: HypercubeConfig,
+        vGrid: VirtualGrid,
+        bridge: IBufferBridge,
         parityManager: ParityManager
     ): Promise<IDispatcher> {
         if (config.mode === 'gpu') {
@@ -150,7 +150,7 @@ export class HypercubeNeoFactory implements IFactory {
         }
 
         // Kernel-specific rules validation
-        for (const rule of descriptor.rules) {
+        for (const rule of (descriptor.rules || [])) {
             if (rule.type === 'lbm-d2q9' || rule.type === 'neo-ocean-v1') {
                 // Check if it has a source face and if it's marked as synchronized
                 const populations = descriptor.faces.find(f => f.name === rule.source);

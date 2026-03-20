@@ -25,13 +25,13 @@ export class ObjectRasterizer implements IRasterizer {
 
         const nx = vChunk.localDimensions.nx;
         const ny = vChunk.localDimensions.ny;
-        const padding = descriptor.requirements.ghostCells;
+        const padding = descriptor.requirements?.ghostCells ?? 0;
 
         // Calculate maximum dimensions and chunk world offsets
         let maxNx = 0;
         let chunkX0 = 0;
         let chunkY0 = 0;
-        
+
         for (const c of grid.chunks) {
             maxNx = Math.max(maxNx, c.localDimensions.nx);
             // World X offset is the sum of all preceding chunks' widths along the X axis (y and z being the same)
@@ -43,7 +43,7 @@ export class ObjectRasterizer implements IRasterizer {
                 chunkY0 += c.localDimensions.ny;
             }
         }
-        
+
         const pNx = maxNx + 2 * padding;
         const pNy = Math.ceil(config.dimensions.ny / config.chunks.y) + 2 * padding; // Roughly, for bounds
 

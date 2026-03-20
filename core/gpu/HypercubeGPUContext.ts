@@ -14,6 +14,7 @@ export class HypercubeGPUContext {
     }
 
     static async init(): Promise<boolean> {
+        if (this._device) return true;
         if (!navigator.gpu) {
             console.error("[HypercubeGPUContext] WebGPU n'est pas supporté par ce navigateur.");
             return false;

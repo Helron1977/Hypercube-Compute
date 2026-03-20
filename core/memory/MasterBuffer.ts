@@ -213,6 +213,27 @@ export class MasterBuffer implements IMasterBuffer {
     }
 
     /**
+     * Retrieves the Float32Array view for a specific face.
+     */
+    public getFaceData(chunkId: string, faceName: string): Float32Array {
+        const views = this.getChunkViews(chunkId);
+        const dataContract = (this.vGrid as any).dataContract as DataContract;
+        const faceIdx = dataContract.descriptor.faces.findIndex((f: any) => f.name === faceName);
+
+        if (faceIdx === -1) {
+            throw new Error(`MasterBuffer: Face '${faceName}' not found.`);
+        }
+
+        const faceMappings = dataContract.getFaceMappings();
+        let bufIdx = 0;
+        for (let i = 0; i < faceIdx; i++) {
+            bufIdx += faceMappings[i].isPingPong ? 2 : 1;
+        }
+
+        return views.faces[bufIdx];
+    }
+
+    /**
      * Initialize all cell populations to equilibrium (rho=1.0, u=0.0).
      * Prevents NaN when compute pass reads ghost cells before first sync.
      */

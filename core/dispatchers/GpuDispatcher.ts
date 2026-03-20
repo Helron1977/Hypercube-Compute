@@ -82,7 +82,7 @@ export class GpuDispatcher implements IDispatcher {
 
         const commandEncoder = this.device.createCommandEncoder();
 
-        for (const scheme of descriptor.rules) {
+        for (const scheme of (descriptor.rules || [])) {
             const pipeline = await this.getPipeline(scheme.type);
 
             // Helpers for offset resolution using optimized ParityManager and Local Cache

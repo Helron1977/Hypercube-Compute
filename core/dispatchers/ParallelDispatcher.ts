@@ -61,7 +61,7 @@ export class ParallelDispatcher implements IDispatcher {
     }
 
     private initMetadata(descriptor: any) {
-        const persistentFaces = descriptor.faces
+        const persistentFaces = (descriptor.faces || [])
             .filter((f: any) => f.isPersistent !== false)
             .map((f: any) => f.name);
 
@@ -89,7 +89,7 @@ export class ParallelDispatcher implements IDispatcher {
                 maxNy = Math.max(maxNy, chunk.localDimensions.ny);
                 maxNz = Math.max(maxNz, chunk.localDimensions.nz || 1);
             }
-            const padding = descriptor.requirements.ghostCells;
+            const padding = descriptor.requirements?.ghostCells ?? 0;
             const pNx = maxNx + 2 * padding;
             const pNy = maxNy + 2 * padding;
             const pNz = maxNz; // 3D slices usually not padded in Z for simple tensors
@@ -105,7 +105,7 @@ export class ParallelDispatcher implements IDispatcher {
                 const viewsData = pViews.map(v => ({ offset: v.byteOffset, length: v.length }));
                 workerTasksMap.get(worker)!.push({
                     chunk: vChunk,
-                    schemes: descriptor.rules,
+                    schemes: (descriptor.rules || []),
                     viewsData
                 });
             }

@@ -5,17 +5,35 @@
             "maxDistance": 1000
         },
         "faces": [
-            { "name": "distance", "isPingPong": true, "isSynchronized": true },
-            { "name": "obstacles", "isPingPong": false, "isSynchronized": true }
+            {
+                "name": "distance",
+                "isPingPong": true,
+                "isSynchronized": true
+            },
+            {
+                "name": "obstacles",
+                "isPingPong": false,
+                "isSynchronized": true
+            }
         ]
     },
     "config": {
         "mode": "auto",
-        "dimensions": { "nx": 128, "ny": 128, "nz": 1 },
-        "chunks": { "x": 1, "y": 1 }
+        "dimensions": {
+            "nx": 128,
+            "ny": 128,
+            "nz": 1
+        },
+        "chunks": {
+            "x": 1,
+            "y": 1
+        }
     },
     "visualProfile": {
         "colormap": "inferno",
-        "range": [0, 100]
+        "range": [
+            0,
+            100
+        ]
     }
 }

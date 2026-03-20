@@ -31,7 +31,7 @@ export class NumericalDispatcher implements IDispatcher {
 
         // 1. Prepare indices for all faces once per step
         const faceIndices: Record<string, { read: number; write: number }> = {};
-        for (const face of descriptor.faces) {
+        for (const face of (descriptor.faces || [])) {
             faceIndices[face.name] = this.parityManager.getFaceIndices(face.name);
         }
 
@@ -43,7 +43,7 @@ export class NumericalDispatcher implements IDispatcher {
             maxNz = Math.max(maxNz, chunk.localDimensions.nz || 1);
         }
 
-        const padding = descriptor.requirements.ghostCells;
+        const padding = descriptor.requirements?.ghostCells ?? 0;
         const pNx = maxNx + 2 * padding;
         const pNy = maxNy + 2 * padding;
 
@@ -67,7 +67,7 @@ export class NumericalDispatcher implements IDispatcher {
             const pViews = this.bridge.getChunkViews(vChunk.id);
 
             // Persistence Copy: Ensure ping-pong buffers stay in sync for persistent data
-            for (const face of descriptor.faces) {
+            for (const face of (descriptor.faces || [])) {
                 const indices = faceIndices[face.name];
                 if (indices.write !== indices.read && face.isPersistent !== false) {
                     pViews[indices.write].set(pViews[indices.read]);
@@ -80,7 +80,7 @@ export class NumericalDispatcher implements IDispatcher {
             this.pooledContext.nz = vChunk.localDimensions.nz || 1;
             this.pooledContext.chunk = vChunk;
 
-            for (const scheme of descriptor.rules) {
+            for (const scheme of (descriptor.rules || [])) {
                 const kernel = KernelRegistry.get(scheme.type);
                 if (kernel) {
                     this.pooledContext.scheme = scheme;
