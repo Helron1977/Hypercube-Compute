@@ -3,8 +3,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { HypercubeNeoFactory } from '../../../core/HypercubeNeoFactory';
 
 /**
- * LIFE NEBULA V16.0 - THE VISUAL MASTERPIECE
- * Port 3000 | Native 2.5D | Aligned Semantics
+ * LIFE NEBULA V17.0 - THE SOUL RESTORED
+ * Fix: Ghost-Cell Stride (66x66 -> 64x64)
+ * Fix: Prey Flocking (Boids) & Shark Persistence
  */
 const NX = 64; const NY = 64; const NZ = 1;
 const TANK_SIZE = 20;
@@ -24,7 +25,7 @@ class LifeNebula {
     
     private engine: any = null;
     private shark!: THREE.Group;
-    private preyCount = 50;
+    private preyCount = 60;
     private preyList: THREE.Group[] = [];
     private preyVels: THREE.Vector3[] = [];
 
@@ -42,8 +43,8 @@ class LifeNebula {
         const container = document.getElementById('canvas-container')!;
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x020617);
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.set(22, 12, 22);
+        this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.set(18, 14, 18);
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -54,13 +55,13 @@ class LifeNebula {
         this.controls.enableDamping = true;
 
         this.scene.add(new THREE.HemisphereLight(0x38bdf8, 0x020617, 2));
-        const sun = new THREE.DirectionalLight(0xffffff, 4.0);
-        sun.position.set(10, 25, 15);
+        const sun = new THREE.DirectionalLight(0xffffff, 3.5);
+        sun.position.set(10, 25, 10);
         this.scene.add(sun);
 
         const canvas = document.createElement('canvas');
         canvas.width = NX; canvas.height = NY;
-        canvas.style.cssText = 'position: absolute; bottom: 20px; right: 20px; width: 140px; height: 140px; border: 2px solid #38bdf8; border-radius: 4px; opacity: 0.9;';
+        canvas.style.cssText = 'position: absolute; bottom: 20px; right: 20px; width: 140px; height: 140px; border: 2px solid #38bdf8; border-radius: 4px; opacity: 0.8;';
         container.appendChild(canvas);
         this.heatmapCtx = canvas.getContext('2d')!;
 
@@ -69,27 +70,29 @@ class LifeNebula {
 
     private setupModels() {
         this.shark = new THREE.Group();
-        const sMat = new THREE.MeshPhysicalMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.2, clearcoat: 1 });
-        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.5, 1.4, 4, 16), sMat);
-        body.rotation.x = Math.PI / 2; body.scale.set(1, 1, 0.7);
+        const sMat = new THREE.MeshPhysicalMaterial({ color: 0x475569, metalness: 0.9, roughness: 0.1, clearcoat: 1 });
+        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.2, 4, 16), sMat);
+        body.rotation.x = Math.PI / 2; body.scale.set(1, 1, 0.8);
         this.shark.add(body);
-        this.shark.position.y = SURFACE_Y; // SHARK ON SURFACE
+        this.shark.position.set(0, SURFACE_Y, 0);
         this.scene.add(this.shark);
 
         const colors = [0xf43f5e, 0x38bdf8, 0x10b981, 0x818cf8];
         for (let i = 0; i < this.preyCount; i++) {
-            const mat = new THREE.MeshStandardMaterial({ color: colors[i%4], emissive: colors[i%4], emissiveIntensity: 2.0 });
-            const p = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2), mat);
-            p.scale.set(1, 0.4, 1.6);
-            p.position.set((Math.random()-0.5)*18, SURFACE_Y + (Math.random()-0.5)*2, (Math.random()-0.5)*18);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: colors[i%4], emissive: colors[i%4], emissiveIntensity: 2.5 
+            });
+            const p = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18), mat);
+            p.scale.set(1, 0.5, 1.8);
+            p.position.set((Math.random()-0.5)*18, SURFACE_Y + (Math.random()-0.5)*1, (Math.random()-0.5)*18);
             this.scene.add(p);
             this.preyList.push(p as any);
-            this.preyVels.push(new THREE.Vector3((Math.random()-0.5)*0.12, (Math.random()-0.5)*0.08, (Math.random()-0.5)*0.12));
+            this.preyVels.push(new THREE.Vector3((Math.random()-0.5)*0.1, 0, (Math.random()-0.5)*0.1));
         }
 
         this.waterGeo = new THREE.PlaneGeometry(TANK_SIZE, TANK_SIZE, NX - 1, NY - 1);
         const wMat = new THREE.MeshPhysicalMaterial({ 
-            color: 0x38bdf8, transparent: true, opacity: 0.7, transmission: 0.4, side: THREE.DoubleSide,
+            color: 0x38bdf8, transparent: true, opacity: 0.65, transmission: 0.5, side: THREE.DoubleSide,
             metalness: 0.9, roughness: 0.05, clearcoat: 1.0, clearcoatRoughness: 0.05
         });
         this.waterMesh = new THREE.Mesh(this.waterGeo, wMat);
@@ -102,10 +105,7 @@ class LifeNebula {
         const factory = new HypercubeNeoFactory();
         const manifest = await factory.fromManifest('./nebula-manifest.json');
         this.engine = await factory.build(manifest.config, manifest.engine);
-        
-        const loader = document.getElementById('loader');
-        if (loader) loader.style.display = 'none';
-
+        if (document.getElementById('loader')) document.getElementById('loader')!.style.display = 'none';
         this.animate();
     }
 
@@ -134,7 +134,7 @@ class LifeNebula {
             config.objects.push({
                 id: 'shark_wake', type: 'circle',
                 position: { x: gShark.x - 3, y: gShark.y - 3 }, dimensions: { w: 7, h: 7 },
-                properties: { rho: 8.0, biology: 1.0, obstacles: 1.0 }, rasterMode: "replace"
+                properties: { rho: 6.0, biology: 1.0 }, rasterMode: "replace"
             });
 
             await this.engine.step(1);
@@ -143,22 +143,29 @@ class LifeNebula {
             config.objects = config.objects.filter((o: any) => o.id !== 'shark_wake');
 
             const views = bridge.getChunkViews(chunk.id);
-            const rhoIdx = this.engine.parityManager.getFaceIndices('rho').read;
-            const predIdx = this.engine.parityManager.getFaceIndices('sdf_predator_x').read;
-            const heatIdx = this.engine.parityManager.getFaceIndices('strategy_heatmap').read;
+            const rIdx = this.engine.parityManager.getFaceIndices('rho').read;
+            const pIdx = this.engine.parityManager.getFaceIndices('sdf_predator_x').read;
+            const hIdx = this.engine.parityManager.getFaceIndices('strategy_heatmap').read;
             
-            const rData = views[rhoIdx];
-            const px = views[predIdx];
-            const heat = views[heatIdx];
+            const rData = views[rIdx];
+            const pxData = views[pIdx];
+            const heatData = views[hIdx];
 
+            // --- STRIDE FIX (66x66 -> 64x64) ---
             const pAttr = this.waterGeo.attributes.position;
-            for (let i = 0; i < NX * NY; i++) {
-                const v = rData[i];
-                pAttr.setZ(i, isNaN(v) ? 0 : (v - 1.0) * 80.0); // Correct Rho-based displacement
+            const stride = NX + 2; // Padded width
+            for (let y = 0; y < NY; y++) {
+                for (let x = 0; x < NX; x++) {
+                    const vertIdx = y * NX + x;
+                    const vramIdx = (y + 1) * stride + (x + 1); // Skip 1-pixel ghost border
+                    const v = rData[vramIdx];
+                    pAttr.setZ(vertIdx, isNaN(v) ? 0 : (v - 1.0) * 80.0);
+                }
             }
             pAttr.needsUpdate = true; this.waterGeo.computeVertexNormals();
 
-            const tx = px[gShark.y * 64 + gShark.x];
+            // --- SHARK INTELLIGENCE ---
+            const tx = pxData[(gShark.y + 1) * stride + (gShark.x + 1)]; // Corrected index for SDF read
             if (tx !== -10000 && tx !== undefined) {
                 const targetPos = this.gridToWorld(tx, gShark.y);
                 const desired = targetPos.sub(this.shark.position).normalize();
@@ -167,67 +174,94 @@ class LifeNebula {
                     this.sharkVel.lerp(desired.multiplyScalar(0.12), 0.05);
                     if (Math.random() < 0.01) this.sharkState = SharkState.AMBUSH;
                 } else if (this.sharkState === SharkState.AMBUSH) {
-                    this.sharkVel.multiplyScalar(0.8);
+                    this.sharkVel.multiplyScalar(0.85);
                     if (Math.random() < 0.05) this.sharkState = SharkState.HUNT;
                 } else if (this.sharkState === SharkState.HUNT) {
-                    this.sharkVel.lerp(desired.multiplyScalar(0.28), 0.12);
-                    if (Math.random() < 0.05) this.sharkState = SharkState.PATROL;
+                    this.sharkVel.lerp(desired.multiplyScalar(0.3), 0.15); // Faster strike
+                    if (Math.random() < 0.04) this.sharkState = SharkState.PATROL;
                 }
             }
 
+            // --- CAPTURE & HEATMAP ---
             this.preyList.forEach((p, i) => {
                 const dist = p.position.distanceTo(this.shark.position);
-                if (dist < 1.5) {
+                if (dist < 1.4) {
                     const g = this.worldToGrid(p.position);
-                    heat[g.y * 64 + g.x] += 15.0; 
-                    p.position.set((Math.random()-0.5)*18, SURFACE_Y + (Math.random()-0.5)*2, (Math.random()-0.5)*18);
-                    console.warn(`Catch! Revenue @ ${g.x}, ${g.y}`);
+                    heatData[(g.y + 1) * stride + (g.x + 1)] += 20.0; 
+                    p.position.set((Math.random()-0.5)*18, SURFACE_Y, (Math.random()-0.5)*18);
+                    console.warn(`Success: Catch @ grid ${g.x}, ${g.y}`);
                 }
             });
 
+            // Viz Heatmap (Interior only)
             const imgData = this.heatmapCtx.createImageData(NX, NY);
-            for(let i=0; i<NX*NY; i++) {
-                imgData.data[i*4+0] = 0; imgData.data[i*4+1] = Math.min(255, heat[i]*15); imgData.data[i*4+2] = 255; imgData.data[i*4+3] = 255;
+            for(let y=0; y<NY; y++) {
+                for(let x=0; x<NX; x++) {
+                    const idx = (y * NX + x) * 4;
+                    const h = heatData[(y + 1) * stride + (x + 1)];
+                    imgData.data[idx+0] = 0; imgData.data[idx+1] = Math.min(255, h*25); imgData.data[idx+2] = 255; imgData.data[idx+3] = 255;
+                }
             }
             this.heatmapCtx.putImageData(imgData, 0, 0);
 
-        } catch (e) { console.error("Nebula Sync Error:", e); }
+        } catch (e) { console.error("Nebula Stride Error:", e); }
         finally { this.isUpdating = false; }
     }
 
     private animate = async () => {
         await this.updateAI();
-        const b = 9.8; const vh = 3.0;
+        const b = 9.8; 
         
+        // Wall Avoidance
         const distX = b - Math.abs(this.shark.position.x);
         const distZ = b - Math.abs(this.shark.position.z);
-        if ((distX < 3 || distZ < 3) && this.sharkState !== SharkState.HUNT) {
-            const push = new THREE.Vector3(-this.shark.position.x, 0, -this.shark.position.z).normalize().multiplyScalar(0.1);
-            this.sharkVel.lerp(push, 0.15);
+        if (distX < 3 || distZ < 3) {
+            const push = new THREE.Vector3(-this.shark.position.x, 0, -this.shark.position.z).normalize().multiplyScalar(0.12);
+            this.sharkVel.lerp(push, 0.1);
         }
 
         this.shark.position.add(this.sharkVel);
         if (this.sharkVel.lengthSq() > 0.001) this.shark.lookAt(this.shark.position.clone().add(this.sharkVel));
-        this.shark.position.clamp(new THREE.Vector3(-b, SURFACE_Y - vh, -b), new THREE.Vector3(b, SURFACE_Y + vh, b));
+        this.shark.position.clamp(new THREE.Vector3(-b, SURFACE_Y - 2, -b), new THREE.Vector3(b, SURFACE_Y + 2, b));
 
+        // --- PREY FLOCKING (BOIDS LIGHT) ---
         this.preyList.forEach((p, i) => {
-            const pDX = b - Math.abs(p.position.x);
-            const pDZ = b - Math.abs(p.position.z);
-            if (pDX < 1.5 || pDZ < 1.5) {
-                const pPush = new THREE.Vector3(-p.position.x, 0, -p.position.z).normalize().multiplyScalar(0.05);
-                this.preyVels[i].lerp(pPush, 0.1);
+            let cohesion = new THREE.Vector3();
+            let separation = new THREE.Vector3();
+            let count = 0;
+
+            for (let j = 0; j < 15; j++) { // Check neighbors
+                const other = this.preyList[(i + j + 1) % this.preyCount];
+                const dist = p.position.distanceTo(other.position);
+                if (dist < 3) {
+                    cohesion.add(other.position);
+                    separation.add(p.position.clone().sub(other.position).divideScalar(dist + 0.1));
+                    count++;
+                }
             }
+
+            if (count > 0) {
+                cohesion.divideScalar(count).sub(p.position).multiplyScalar(0.02);
+                separation.multiplyScalar(0.05);
+                this.preyVels[i].add(cohesion).add(separation);
+            }
+
+            // Wall Bounce
+            if (b - Math.abs(p.position.x) < 2 || b - Math.abs(p.position.z) < 2) {
+                this.preyVels[i].add(new THREE.Vector3(-p.position.x, 0, -p.position.z).normalize().multiplyScalar(0.04));
+            }
+
+            // Hunter Evasion
+            const distToShark = p.position.distanceTo(this.shark.position);
+            if (distToShark < 4.5) {
+                const evade = p.position.clone().sub(this.shark.position).normalize().multiplyScalar(0.2);
+                this.preyVels[i].lerp(evade, 0.3);
+            }
+
+            this.preyVels[i].clampLength(0.02, 0.15);
             p.position.add(this.preyVels[i]);
             if (this.preyVels[i].lengthSq() > 0.001) p.lookAt(p.position.clone().add(this.preyVels[i]));
-            p.position.clamp(new THREE.Vector3(-b, SURFACE_Y - vh, -b), new THREE.Vector3(b, SURFACE_Y + vh, b));
-            
-            const dist = p.position.distanceTo(this.shark.position);
-            if (dist < 4.0) {
-                const evade = p.position.clone().sub(this.shark.position).normalize();
-                if (pDX < 1.0 && pDZ < 1.0) evade.multiplyScalar(0.01); 
-                else evade.multiplyScalar(0.2); 
-                this.preyVels[i].lerp(evade, 0.25);
-            }
+            p.position.clamp(new THREE.Vector3(-b, SURFACE_Y - 1, -b), new THREE.Vector3(b, SURFACE_Y + 1, b));
         });
 
         this.renderer.render(this.scene, this.camera);
